@@ -7,12 +7,18 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
-import { FridgeItem } from '../types';
-import { getFridgeItems, saveFridgeItems } from '../storage/storage';
+import { getFridgeItems, addFridgeItem, updateFridgeItem, deleteFridgeItem } from '../services/api';
 import AddItemInput from '../components/AddItemInput';
 
+interface FridgeItemData {
+  _id: string;
+  name: string;
+  expiresAt?: string;
+  addedAt: string;
+}
+
 export default function FridgeScreen() {
-  const [items, setItems] = useState<FridgeItem[]>([]);
+  const [items, setItems] = useState<FridgeItemData[]>([]);
 
   const load = useCallback(async () => {
     setItems(await getFridgeItems());
@@ -22,18 +28,12 @@ export default function FridgeScreen() {
     load();
   }, [load]);
 
-  const addItem = async (name: string) => {
-    const newItem: FridgeItem = {
-      id: Date.now().toString(),
-      name,
-      addedAt: new Date().toISOString(),
-    };
-    const updated = [...items, newItem];
-    setItems(updated);
-    await saveFridgeItems(updated);
+  const handleAdd = async (name: string) => {
+    const item = await addFridgeItem(name);
+    setItems((prev) => [item, ...prev]);
   };
 
-  const setExpiry = (item: FridgeItem) => {
+  const setExpiry = (item: FridgeItemData) => {
     Alert.prompt(
       'Set Expiry',
       `Days until ${item.name} expires:`,
@@ -45,11 +45,8 @@ export default function FridgeScreen() {
             if (!days) return;
             const d = new Date();
             d.setDate(d.getDate() + parseInt(days, 10));
-            const updated = items.map((i) =>
-              i.id === item.id ? { ...i, expiresAt: d.toISOString() } : i,
-            );
-            setItems(updated);
-            await saveFridgeItems(updated);
+            const updated = await updateFridgeItem(item._id, { expiresAt: d.toISOString() });
+            setItems((prev) => prev.map((i) => (i._id === item._id ? updated : i)));
           },
         },
       ],
@@ -60,9 +57,8 @@ export default function FridgeScreen() {
   };
 
   const removeItem = async (id: string) => {
-    const updated = items.filter((i) => i.id !== id);
-    setItems(updated);
-    await saveFridgeItems(updated);
+    await deleteFridgeItem(id);
+    setItems((prev) => prev.filter((i) => i._id !== id));
   };
 
   const getDaysUntilExpiry = (expiresAt?: string) => {
@@ -87,10 +83,10 @@ export default function FridgeScreen() {
 
   return (
     <View style={styles.container}>
-      <AddItemInput placeholder="Add item to fridge..." onAdd={addItem} />
+      <AddItemInput placeholder="Add item to fridge..." onAdd={handleAdd} />
       <FlatList
         data={sortedItems}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item._id}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => {
           const days = getDaysUntilExpiry(item.expiresAt);
@@ -106,7 +102,7 @@ export default function FridgeScreen() {
                     : 'Tap to set expiry'}
                 </Text>
               </TouchableOpacity>
-              <TouchableOpacity onPress={() => removeItem(item.id)}>
+              <TouchableOpacity onPress={() => removeItem(item._id)}>
                 <Text style={styles.remove}>X</Text>
               </TouchableOpacity>
             </View>

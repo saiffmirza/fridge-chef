@@ -1,11 +1,15 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, Text, FlatList, TouchableOpacity, StyleSheet } from 'react-native';
-import { PantryItem } from '../types';
-import { getPantryItems, savePantryItems } from '../storage/storage';
+import { getPantryItems, addPantryItem, deletePantryItem } from '../services/api';
 import AddItemInput from '../components/AddItemInput';
 
+interface PantryItemData {
+  _id: string;
+  name: string;
+}
+
 export default function PantryScreen() {
-  const [items, setItems] = useState<PantryItem[]>([]);
+  const [items, setItems] = useState<PantryItemData[]>([]);
 
   const load = useCallback(async () => {
     setItems(await getPantryItems());
@@ -15,33 +19,27 @@ export default function PantryScreen() {
     load();
   }, [load]);
 
-  const addItem = async (name: string) => {
-    const newItem: PantryItem = {
-      id: Date.now().toString(),
-      name,
-    };
-    const updated = [...items, newItem];
-    setItems(updated);
-    await savePantryItems(updated);
+  const handleAdd = async (name: string) => {
+    const item = await addPantryItem(name);
+    setItems((prev) => [...prev, item]);
   };
 
   const removeItem = async (id: string) => {
-    const updated = items.filter((i) => i.id !== id);
-    setItems(updated);
-    await savePantryItems(updated);
+    await deletePantryItem(id);
+    setItems((prev) => prev.filter((i) => i._id !== id));
   };
 
   return (
     <View style={styles.container}>
-      <AddItemInput placeholder="Add pantry staple (spices, oils, etc.)..." onAdd={addItem} />
+      <AddItemInput placeholder="Add pantry staple (spices, oils, etc.)..." onAdd={handleAdd} />
       <FlatList
         data={items}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item._id}
         contentContainerStyle={styles.list}
         renderItem={({ item }) => (
           <View style={styles.item}>
             <Text style={styles.itemName}>{item.name}</Text>
-            <TouchableOpacity onPress={() => removeItem(item.id)}>
+            <TouchableOpacity onPress={() => removeItem(item._id)}>
               <Text style={styles.remove}>X</Text>
             </TouchableOpacity>
           </View>

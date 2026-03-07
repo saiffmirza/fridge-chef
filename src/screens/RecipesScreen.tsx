@@ -6,11 +6,17 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
-  ScrollView,
 } from 'react-native';
-import { Recipe } from '../types';
-import { getFridgeItems, getPantryItems } from '../storage/storage';
-import { getRecipeSuggestions } from '../services/gemini';
+import { getRecipeSuggestions } from '../services/api';
+
+interface Recipe {
+  title: string;
+  readyInMinutes: number;
+  summary: string;
+  ingredients: string[];
+  instructions: string;
+  missingIngredients: string[];
+}
 
 export default function RecipesScreen() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
@@ -23,21 +29,7 @@ export default function RecipesScreen() {
     setError(null);
     setExpanded(null);
     try {
-      const [fridgeItems, pantryItems] = await Promise.all([
-        getFridgeItems(),
-        getPantryItems(),
-      ]);
-
-      const fridgeNames = fridgeItems.map((i) => i.name);
-      const pantryNames = pantryItems.map((i) => i.name);
-
-      if (fridgeNames.length === 0 && pantryNames.length === 0) {
-        setError('Add some ingredients to your fridge or pantry first!');
-        setLoading(false);
-        return;
-      }
-
-      const results = await getRecipeSuggestions(fridgeNames, pantryNames);
+      const results = await getRecipeSuggestions();
       setRecipes(results);
     } catch (e: any) {
       setError(e.message || 'Something went wrong');
@@ -46,8 +38,8 @@ export default function RecipesScreen() {
     }
   };
 
-  const toggleExpand = (id: number) => {
-    setExpanded(expanded === id ? null : id);
+  const toggleExpand = (index: number) => {
+    setExpanded(expanded === index ? null : index);
   };
 
   return (
@@ -64,10 +56,10 @@ export default function RecipesScreen() {
 
       <FlatList
         data={recipes}
-        keyExtractor={(item) => item.id.toString()}
+        keyExtractor={(_, index) => index.toString()}
         contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <TouchableOpacity style={styles.card} onPress={() => toggleExpand(item.id)}>
+        renderItem={({ item, index }) => (
+          <TouchableOpacity style={styles.card} onPress={() => toggleExpand(index)}>
             <View style={styles.cardHeader}>
               <Text style={styles.title}>{item.title}</Text>
               <View style={styles.meta}>
@@ -76,7 +68,7 @@ export default function RecipesScreen() {
                 )}
                 {(item.missingIngredients?.length ?? 0) > 0 && (
                   <Text style={styles.missing}>
-                    {item.missingIngredients!.length} missing
+                    {item.missingIngredients.length} missing
                   </Text>
                 )}
               </View>
@@ -84,7 +76,7 @@ export default function RecipesScreen() {
 
             {item.summary && <Text style={styles.summary}>{item.summary}</Text>}
 
-            {expanded === item.id && (
+            {expanded === index && (
               <View style={styles.details}>
                 {item.ingredients && item.ingredients.length > 0 && (
                   <View style={styles.section}>
