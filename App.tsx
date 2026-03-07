@@ -1,20 +1,40 @@
+import React from 'react';
+import { NavigationContainer } from '@react-navigation/native';
+import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
-import { StyleSheet, Text, View } from 'react-native';
+import FridgeScreen from './src/screens/FridgeScreen';
+import PantryScreen from './src/screens/PantryScreen';
+import RecipesScreen from './src/screens/RecipesScreen';
+
+const Tab = createBottomTabNavigator();
 
 export default function App() {
   return (
-    <View style={styles.container}>
-      <Text>Open up App.tsx to start working on your app!</Text>
+    <NavigationContainer>
       <StatusBar style="auto" />
-    </View>
+      <Tab.Navigator
+        screenOptions={{
+          tabBarActiveTintColor: '#4CAF50',
+          headerStyle: { backgroundColor: '#4CAF50' },
+          headerTintColor: '#fff',
+        }}
+      >
+        <Tab.Screen
+          name="Fridge"
+          component={FridgeScreen}
+          options={{ title: 'My Fridge' }}
+        />
+        <Tab.Screen
+          name="Pantry"
+          component={PantryScreen}
+          options={{ title: 'Pantry Staples' }}
+        />
+        <Tab.Screen
+          name="Recipes"
+          component={RecipesScreen}
+          options={{ title: 'Find Recipes' }}
+        />
+      </Tab.Navigator>
+    </NavigationContainer>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
