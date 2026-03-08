@@ -31,7 +31,7 @@ export default function PantryScreen() {
 
   return (
     <View style={styles.container}>
-      <AddItemInput placeholder="Add pantry staple (spices, oils, etc.)..." onAdd={handleAdd} />
+      <AddItemInput placeholder="Add pantry staple (spices, oils, etc.)..." onAdd={handleAdd} mode="pantry" />
       <FlatList
         data={items}
         keyExtractor={(item) => item._id}

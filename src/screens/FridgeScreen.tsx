@@ -83,7 +83,7 @@ export default function FridgeScreen() {
 
   return (
     <View style={styles.container}>
-      <AddItemInput placeholder="Add item to fridge..." onAdd={handleAdd} />
+      <AddItemInput placeholder="Add item to fridge..." onAdd={handleAdd} mode="fridge" />
       <FlatList
         data={sortedItems}
         keyExtractor={(item) => item._id}
