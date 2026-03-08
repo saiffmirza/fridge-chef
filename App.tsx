@@ -6,6 +6,7 @@ import { StatusBar } from 'expo-status-bar';
 import FridgeScreen from './src/screens/FridgeScreen';
 import PantryScreen from './src/screens/PantryScreen';
 import RecipesScreen from './src/screens/RecipesScreen';
+import SettingsScreen from './src/screens/SettingsScreen';
 import AuthScreen from './src/screens/AuthScreen';
 import { isLoggedIn, logout } from './src/services/api';
 
@@ -65,6 +66,11 @@ export default function App() {
           name="Recipes"
           component={RecipesScreen}
           options={{ title: 'Find Recipes' }}
+        />
+        <Tab.Screen
+          name="Settings"
+          component={SettingsScreen}
+          options={{ title: 'AI Settings' }}
         />
       </Tab.Navigator>
     </NavigationContainer>

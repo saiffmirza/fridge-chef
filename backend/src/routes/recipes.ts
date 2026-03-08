@@ -2,6 +2,8 @@ import { Router, Response } from 'express';
 import { AuthRequest, authenticate } from '../middleware/auth';
 import FridgeItem from '../models/FridgeItem';
 import PantryItem from '../models/PantryItem';
+import UserSettings from '../models/UserSettings';
+import { decryptApiKey } from './settings';
 
 const router = Router();
 router.use(authenticate);
@@ -48,11 +50,77 @@ function validateRecipe(obj: any): RecipeSchema | null {
   };
 }
 
+function parseRecipesFromText(text: string): RecipeSchema[] {
+  const cleaned = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
+  let parsed: any;
+  try {
+    parsed = JSON.parse(cleaned);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map(validateRecipe).filter((r): r is RecipeSchema => r !== null);
+}
+
+async function callGemini(prompt: string): Promise<string> {
+  const response = await fetch(GEMINI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+  });
+  if (!response.ok) throw new Error('Gemini request failed');
+  const data = await response.json();
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (typeof text !== 'string') throw new Error('Unexpected Gemini response shape');
+  return text;
+}
+
+async function callClaude(prompt: string, apiKey: string): Promise<string> {
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 2048,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if (!response.ok) throw new Error('Claude request failed');
+  const data = await response.json();
+  const text = data.content?.[0]?.text;
+  if (typeof text !== 'string') throw new Error('Unexpected Claude response shape');
+  return text;
+}
+
+async function callOpenAI(prompt: string, apiKey: string): Promise<string> {
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'gpt-4o-mini',
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+  if (!response.ok) throw new Error('OpenAI request failed');
+  const data = await response.json();
+  const text = data.choices?.[0]?.message?.content;
+  if (typeof text !== 'string') throw new Error('Unexpected OpenAI response shape');
+  return text;
+}
+
 router.post('/suggestions', async (req: AuthRequest, res: Response) => {
   try {
-    const [fridgeItems, pantryItems] = await Promise.all([
+    const [fridgeItems, pantryItems, userSettings] = await Promise.all([
       FridgeItem.find({ userId: req.userId }),
       PantryItem.find({ userId: req.userId }),
+      UserSettings.findOne({ userId: req.userId }),
     ]);
 
     const fridgeNames = fridgeItems
@@ -92,49 +160,41 @@ RULES:
 - Do NOT add any fields beyond those listed above.
 - If you cannot suggest any recipes, respond with an empty array: []`;
 
-    const response = await fetch(GEMINI_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-      }),
-    });
+    const provider = userSettings?.aiProvider ?? 'gemini';
 
-    if (!response.ok) {
+    let rawText: string;
+    try {
+      if (provider === 'claude') {
+        if (!userSettings?.encryptedApiKey || !userSettings.iv || !userSettings.authTag) {
+          res.status(400).json({ error: 'No API key saved for Claude. Update your AI settings.' });
+          return;
+        }
+        const key = decryptApiKey(userSettings.encryptedApiKey, userSettings.iv, userSettings.authTag);
+        rawText = await callClaude(prompt, key);
+      } else if (provider === 'openai') {
+        if (!userSettings?.encryptedApiKey || !userSettings.iv || !userSettings.authTag) {
+          res.status(400).json({ error: 'No API key saved for OpenAI. Update your AI settings.' });
+          return;
+        }
+        const key = decryptApiKey(userSettings.encryptedApiKey, userSettings.iv, userSettings.authTag);
+        rawText = await callOpenAI(prompt, key);
+      } else {
+        rawText = await callGemini(prompt);
+      }
+    } catch {
       res.status(502).json({ error: 'AI service is temporarily unavailable. Please try again.' });
       return;
     }
 
-    const data = await response.json();
+    const recipes = parseRecipesFromText(rawText);
 
-    const candidate = data.candidates?.[0];
-    if (!candidate?.content?.parts?.[0]?.text) {
-      res.status(502).json({ error: 'AI returned an unexpected response. Please try again.' });
-      return;
-    }
-
-    const text = candidate.content.parts[0].text.trim();
-    const cleaned = text.replace(/^```(?:json)?\n?/i, '').replace(/\n?```$/i, '').trim();
-
-    let parsed: any;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch {
+    if (recipes.length === 0 && rawText.trim() !== '[]') {
       res.status(502).json({ error: 'AI returned an invalid response. Please try again.' });
       return;
     }
-
-    if (!Array.isArray(parsed)) {
-      res.status(502).json({ error: 'AI returned an invalid response. Please try again.' });
-      return;
-    }
-
-    const recipes = parsed
-      .map(validateRecipe)
-      .filter((r): r is RecipeSchema => r !== null);
 
     res.json(recipes);
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: 'Failed to get recipe suggestions. Please try again.' });
   }
 });

@@ -94,3 +94,21 @@ export async function deletePantryItem(id: string) {
 export async function getRecipeSuggestions() {
   return request('/api/recipes/suggestions', { method: 'POST' });
 }
+
+// AI Settings
+export type AiProvider = 'gemini' | 'claude' | 'openai';
+
+export async function getAiSettings(): Promise<{ aiProvider: AiProvider; hasApiKey: boolean }> {
+  return request('/api/settings/ai-provider');
+}
+
+export async function saveAiSettings(aiProvider: AiProvider, apiKey?: string) {
+  return request('/api/settings/ai-provider', {
+    method: 'PUT',
+    body: JSON.stringify({ aiProvider, apiKey }),
+  });
+}
+
+export async function resetAiSettings() {
+  return request('/api/settings/ai-provider', { method: 'DELETE' });
+}
