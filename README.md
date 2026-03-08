@@ -2,6 +2,8 @@
 
 A mobile app that suggests recipes based on what's in your fridge and pantry. Powered by Google Gemini AI.
 
+![Login Screen](screenshots/app.png)
+
 ## Features
 
 - **Fridge Management** — Add items with quantity levels (a little / medium / a lot) and track expiry dates with color-coded warnings
@@ -119,3 +121,14 @@ npx expo start
 | POST | `/api/recipes/suggestions` | Get AI recipe suggestions |
 
 All endpoints except auth require a `Bearer` token in the `Authorization` header.
+
+## Screenshots
+
+To take a screenshot of the app running in web mode:
+
+```bash
+# Make sure the backend and frontend are running first
+npx tsx scripts/screenshot.ts
+```
+
+This uses Playwright to capture the app at mobile viewport size (390x844) and saves to `screenshots/app.png`.
