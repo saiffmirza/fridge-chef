@@ -2,8 +2,6 @@
 
 A mobile app that suggests recipes based on what's in your fridge and pantry. Powered by Google Gemini AI.
 
-![Login Screen](screenshots/app.png)
-
 ## Features
 
 - **Fridge Management** — Add items with quantity levels (a little / medium / a lot) and track expiry dates with color-coded warnings
@@ -19,6 +17,9 @@ A mobile app that suggests recipes based on what's in your fridge and pantry. Po
 - React Navigation (bottom tabs)
 - AsyncStorage
 
+**Testing**
+- Playwright (headless Chromium, e2e via Expo web)
+
 **Backend**
 - Node.js / Express 5
 - MongoDB (Mongoose)
@@ -30,6 +31,8 @@ A mobile app that suggests recipes based on what's in your fridge and pantry. Po
 ```
 fridge-chef/
 ├── App.tsx                          # Root component with auth + tab navigation
+├── playwright/
+│   └── tests.ts                     # E2E tests (login, fridge, pantry, recipes, logout)
 ├── src/
 │   ├── components/
 │   │   └── AddItemInput.tsx         # Reusable input with quantity follow-up
@@ -122,13 +125,17 @@ npx expo start
 
 All endpoints except auth require a `Bearer` token in the `Authorization` header.
 
-## Screenshots
+## Testing
 
-To take a screenshot of the app running in web mode:
+E2E tests use Playwright running against the Expo web build. Tests are in `playwright/tests.ts`.
 
 ```bash
-# Make sure the backend and frontend are running first
-npx tsx scripts/screenshot.ts
-```
+# 1. Start the backend
+cd backend && npm run dev
 
-This uses Playwright to capture the app at mobile viewport size (390x844) and saves to `screenshots/app.png`.
+# 2. Start the frontend (in another terminal)
+npx expo start --web --port 8082
+
+# 3. Run tests (in another terminal)
+npx tsx playwright/tests.ts
+```
