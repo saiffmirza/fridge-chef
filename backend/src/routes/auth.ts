@@ -28,7 +28,7 @@ router.post('/register', async (req: Request, res: Response) => {
     }
 
     const user = await User.create({ email, password });
-    const token = generateToken(user._id as string);
+    const token = generateToken(user._id.toString());
     res.status(201).json({ token, email: user.email });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -49,7 +49,7 @@ router.post('/login', async (req: Request, res: Response) => {
       return;
     }
 
-    const token = generateToken(user._id as string);
+    const token = generateToken(user._id.toString());
     res.json({ token, email: user.email });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
