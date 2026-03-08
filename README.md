@@ -31,7 +31,7 @@ A mobile app that suggests recipes based on what's in your fridge and pantry. Po
 ```
 fridge-chef/
 ├── App.tsx                          # Root component with auth + tab navigation
-├── playwright/
+├── tests/
 │   └── tests.ts                     # E2E tests (login, fridge, pantry, recipes, logout)
 ├── src/
 │   ├── components/
@@ -127,7 +127,7 @@ All endpoints except auth require a `Bearer` token in the `Authorization` header
 
 ## Testing
 
-E2E tests use Playwright running against the Expo web build. Tests are in `playwright/tests.ts`.
+E2E tests use Playwright running against the Expo web build. Tests are in `tests/tests.ts`.
 
 ```bash
 # 1. Start the backend
@@ -137,5 +137,5 @@ cd backend && npm run dev
 npx expo start --web --port 8082
 
 # 3. Run tests (in another terminal)
-npx tsx playwright/tests.ts
+npx tsx tests/tests.ts
 ```
