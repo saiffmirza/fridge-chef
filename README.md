@@ -4,7 +4,7 @@
   <img src="./assets/logo.png" alt="fridge, chef." width="320" />
 </p>
 
-A mobile app that suggests recipes based on what's in your fridge and pantry. Powered by Google Gemini AI.
+A mobile app that suggests recipes based on what's in your fridge and pantry. Powered by Google Gemini AI and Groq.
 
 ## Features
 
