@@ -1,21 +1,30 @@
 # Fridge Chef
 
+<p align="center">
+  <img src="./assets/logo.png" alt="fridge, chef." width="320" />
+</p>
+
 A mobile app that suggests recipes based on what's in your fridge and pantry. Powered by Google Gemini AI.
 
 ## Features
 
-- **Fridge Management** — Add items with quantity levels (a little / medium / a lot) and track expiry dates with color-coded warnings
-- **Pantry Staples** — Keep a list of always-available items (spices, oils, sauces) with stock levels
-- **AI Recipe Suggestions** — Get 2-5 recipe ideas based on your ingredients, prioritizing items that expire soon
+- **Fridge Management** — Add items with quantity levels (a little / medium / a lot) and track expiry dates with color-coded urgency dots
+- **Pantry Staples** — Keep a list of always-available items (spices, oils, sauces) with stock levels (running low / some / plenty)
+- **AI Recipe Suggestions** — Get 2–5 recipe ideas based on your ingredients, prioritizing items that expire soon
 - **User Accounts** — Register/login with email and password, data synced across devices
+
+## Design
+
+The interface is designed as a "kitchen notebook" — paper-led, type-driven, editorial. Cream paper canvas (`#FAF6EC`), warm ink charcoal text, with terracotta as the primary accent and olive + butter as secondaries. The wordmark uses Fraunces italic; body copy is set in Manrope. Sticker-style chips, hairline rules, and urgency dots stand in for the usual card-and-icon noise. See `.impeccable.md` for the full design context.
 
 ## Tech Stack
 
 **Frontend**
 - React Native (Expo SDK 55)
 - TypeScript
-- React Navigation (bottom tabs)
+- React Navigation (custom bottom tab bar)
 - AsyncStorage
+- expo-font + Fraunces / Manrope via `@expo-google-fonts`
 
 **Testing**
 - Playwright (headless Chromium, e2e via Expo web)
@@ -30,17 +39,28 @@ A mobile app that suggests recipes based on what's in your fridge and pantry. Po
 
 ```
 fridge-chef/
-├── App.tsx                          # Root component with auth + tab navigation
+├── App.tsx                          # Root: font loading, auth gate, custom tab bar
+├── .impeccable.md                   # Design context (audience, brand, principles)
 ├── tests/
 │   └── tests.ts                     # E2E tests (login, fridge, pantry, recipes, logout)
+├── assets/
+│   ├── logo.png                     # Full wordmark + tomato etching composite
+│   ├── icon.png                     # Tomato-only square crop (app icon)
+│   ├── splash-icon.png              # Splash screen (cream background)
+│   └── favicon.png                  # Web favicon
 ├── src/
+│   ├── theme.ts                     # Colors, type scale, spacing, radii, MAX_CONTENT
+│   ├── auth.ts                      # Auth context (logout)
 │   ├── components/
-│   │   └── AddItemInput.tsx         # Reusable input with quantity follow-up
+│   │   ├── AddItemInput.tsx         # Hairline input + sticker-chip quantity follow-up
+│   │   ├── ScreenHeader.tsx         # Eyebrow + italic display title + sign-out
+│   │   ├── PaperButton.tsx          # Primary / secondary / ghost button
+│   │   └── Chip.tsx                 # Sticker chip (terracotta / olive / butter / ink / ghost)
 │   ├── screens/
-│   │   ├── AuthScreen.tsx           # Login / register
-│   │   ├── FridgeScreen.tsx         # Fridge items with expiry tracking
-│   │   ├── PantryScreen.tsx         # Pantry staples
-│   │   └── RecipesScreen.tsx        # AI recipe suggestions
+│   │   ├── AuthScreen.tsx           # Login / register with frontispiece logo
+│   │   ├── FridgeScreen.tsx         # Numbered list, urgency dots, inline expiry picker
+│   │   ├── PantryScreen.tsx         # Numbered list, sticker chips for stock level
+│   │   └── RecipesScreen.tsx        # Editorial recipe entries, expandable details
 │   └── services/
 │       └── api.ts                   # API client (auth, ingredients, recipes)
 ├── backend/
