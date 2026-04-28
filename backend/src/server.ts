@@ -5,6 +5,7 @@ import mongoose from 'mongoose';
 import authRoutes from './routes/auth';
 import ingredientRoutes from './routes/ingredients';
 import recipeRoutes from './routes/recipes';
+import expiryRoutes from './routes/expiry';
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -16,6 +17,7 @@ app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/ingredients', ingredientRoutes);
 app.use('/api/recipes', recipeRoutes);
+app.use('/api/expiry', expiryRoutes);
 
 mongoose
   .connect(MONGODB_URI)

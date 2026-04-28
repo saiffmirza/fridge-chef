@@ -3,7 +3,6 @@ import {
   Animated,
   Easing,
   FlatList,
-  Platform,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -12,10 +11,13 @@ import {
 import {
   addFridgeItem,
   deleteFridgeItem,
+  estimateExpiry,
   getFridgeItems,
   updateFridgeItem,
 } from '../services/api';
-import AddItemInput from '../components/AddItemInput';
+import BulkAddModal, { FridgeBulkResult } from '../components/BulkAddModal';
+import DatePickerModal from '../components/DatePickerModal';
+import PaperButton from '../components/PaperButton';
 import ScreenHeader from '../components/ScreenHeader';
 import { colors, FONT, MAX_CONTENT, radii, type as type_, webOnly } from '../theme';
 
@@ -25,14 +27,6 @@ interface FridgeItemData {
   expiresAt?: string;
   addedAt: string;
 }
-
-const QUICK_PICKS: { label: string; days: number }[] = [
-  { label: 'today', days: 0 },
-  { label: 'tomorrow', days: 1 },
-  { label: '3 days', days: 3 },
-  { label: '1 week', days: 7 },
-  { label: '2 weeks', days: 14 },
-];
 
 function parseQuantity(raw: string): { name: string; qty?: string } {
   const m = raw.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
@@ -61,9 +55,19 @@ const toneColor = {
   none: colors.inkFaint,
 } as const;
 
+function daysFromNow(days: number): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + days);
+  return d.toISOString();
+}
+
 export default function FridgeScreen() {
   const [items, setItems] = useState<FridgeItemData[]>([]);
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fade = useRef(new Animated.Value(0)).current;
 
   const load = useCallback(async () => {
@@ -75,30 +79,53 @@ export default function FridgeScreen() {
     load();
   }, [load]);
 
-  const handleAdd = async (name: string) => {
-    const item = await addFridgeItem(name);
-    setItems((prev) => [item, ...prev]);
+  const handleBulkConfirm = async (entries: FridgeBulkResult[]) => {
+    setSaving(true);
+    setError(null);
+    try {
+      const estimates = await estimateExpiry(
+        entries.map((e) => ({ name: e.name, daysAgo: e.daysAgo, context: e.context })),
+      );
+      const byName = new Map(estimates.map((est) => [est.name, est.daysUntilExpiry]));
+
+      const created: FridgeItemData[] = [];
+      for (const entry of entries) {
+        const days = byName.get(entry.name) ?? 5;
+        const expiresAt = daysFromNow(days);
+        const item = await addFridgeItem(entry.name, expiresAt);
+        created.push(item);
+      }
+      setItems((prev) => [...created.reverse(), ...prev]);
+      setModalOpen(false);
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : 'Could not add items. Please try again.';
+      setError(msg);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const setExpiryDays = async (id: string, days: number) => {
-    const d = new Date();
-    d.setDate(d.getDate() + days);
+  const setExpiryDate = async (id: string, date: Date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
     const updated = await updateFridgeItem(id, { expiresAt: d.toISOString() });
     setItems((prev) => prev.map((i) => (i._id === id ? updated : i)));
-    setOpenId(null);
+    setEditingId(null);
   };
 
   const clearExpiry = async (id: string) => {
     const updated = await updateFridgeItem(id, { expiresAt: undefined });
     setItems((prev) => prev.map((i) => (i._id === id ? updated : i)));
-    setOpenId(null);
+    setEditingId(null);
   };
 
   const removeItem = async (id: string) => {
     await deleteFridgeItem(id);
     setItems((prev) => prev.filter((i) => i._id !== id));
-    if (openId === id) setOpenId(null);
+    if (editingId === id) setEditingId(null);
   };
+
+  const editingItem = items.find((i) => i._id === editingId) ?? null;
 
   const sorted = useMemo(
     () =>
@@ -130,95 +157,109 @@ export default function FridgeScreen() {
   return (
     <View style={s.root}>
       <View style={s.frame}>
-      <ScreenHeader kicker="The Fridge" title="what's in." italic hint={hint} />
+        <ScreenHeader kicker="The Fridge" title="what's in." italic hint={hint} />
 
-      <AddItemInput placeholder="tomatoes, basil, half a lemon…" onAdd={handleAdd} mode="fridge" />
+        <View style={s.ctaRow}>
+          <PaperButton
+            label="add to fridge"
+            trailing="→"
+            onPress={() => setModalOpen(true)}
+            full
+          />
+        </View>
 
-      <Animated.View style={{ flex: 1, opacity: fade }}>
-        <FlatList
-          data={sorted}
-          keyExtractor={(item) => item._id}
-          contentContainerStyle={s.list}
-          keyboardShouldPersistTaps="handled"
-          ItemSeparatorComponent={() => <View style={s.divider} />}
-          ListEmptyComponent={
-            <View style={s.empty}>
-              <Text style={s.emptyTxt}>
-                Empty shelves.{'\n'}
-                <Text style={s.emptyTxtItalic}>add a few things from above to begin.</Text>
-              </Text>
-            </View>
-          }
-          renderItem={({ item, index }) => {
-            const { name, qty } = parseQuantity(item.name);
-            const status = expiryStatus(item.expiresAt);
-            const isOpen = openId === item._id;
-            const num = String(index + 1).padStart(2, '0');
-            return (
-              <View>
+        {error && (
+          <View style={s.errorRow}>
+            <Text style={s.errorTxt}>{error}</Text>
+          </View>
+        )}
+
+        <Animated.View style={{ flex: 1, opacity: fade }}>
+          <FlatList
+            data={sorted}
+            keyExtractor={(item) => item._id}
+            contentContainerStyle={s.list}
+            keyboardShouldPersistTaps="handled"
+            ItemSeparatorComponent={() => <View style={s.divider} />}
+            ListEmptyComponent={
+              <View style={s.empty}>
+                <Text style={s.emptyTxt}>
+                  Empty shelves.{'\n'}
+                  <Text style={s.emptyTxtItalic}>tap "add to fridge" above to begin.</Text>
+                </Text>
+              </View>
+            }
+            renderItem={({ item, index }) => {
+              const { name, qty } = parseQuantity(item.name);
+              const status = expiryStatus(item.expiresAt);
+              const isExpired = status.tone === 'expired';
+              const num = String(index + 1).padStart(2, '0');
+              return (
                 <TouchableOpacity
                   activeOpacity={0.7}
-                  onPress={() => setOpenId(isOpen ? null : item._id)}
-                  style={[s.row, webOnly({ cursor: 'pointer' })]}
+                  onPress={() => setEditingId(item._id)}
+                  style={[s.row, isExpired && s.rowExpired, webOnly({ cursor: 'pointer' })]}
                 >
                   <Text style={s.num}>{num}</Text>
                   <View style={[s.dot, { backgroundColor: toneColor[status.tone] }]} />
                   <View style={s.middle}>
-                    <Text style={s.name}>{name}</Text>
+                    <Text style={[s.name, isExpired && s.nameExpired]}>{name}</Text>
                     {qty && <Text style={s.qty}>{qty}</Text>}
                   </View>
                   <View style={s.right}>
-                    <Text style={[s.expiry, { color: toneColor[status.tone] }]}>
-                      {status.label}
+                    <Text
+                      style={[
+                        s.expiry,
+                        { color: toneColor[status.tone] },
+                        isExpired && s.expiredLabel,
+                      ]}
+                    >
+                      {isExpired ? 'expired' : status.label}
                     </Text>
-                    <Text style={s.openHint}>{isOpen ? 'close' : 'edit'}</Text>
-                  </View>
-                </TouchableOpacity>
-
-                {isOpen && (
-                  <View style={s.picker}>
-                    <Text style={s.pickerLabel}>expires in</Text>
-                    <View style={s.pickerChips}>
-                      {QUICK_PICKS.map((p) => (
-                        <TouchableOpacity
-                          key={p.label}
-                          onPress={() => setExpiryDays(item._id, p.days)}
-                          activeOpacity={0.85}
-                          style={[s.pickChip, webOnly({ cursor: 'pointer' })]}
-                        >
-                          <Text style={s.pickChipTxt}>{p.label}</Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                    <View style={s.pickerActions}>
-                      {item.expiresAt && (
-                        <TouchableOpacity
-                          onPress={() => clearExpiry(item._id)}
-                          hitSlop={10}
-                          style={webOnly({ cursor: 'pointer' })}
-                        >
-                          <Text style={s.linkTxt}>clear date</Text>
-                        </TouchableOpacity>
-                      )}
-                      <View style={{ flex: 1 }} />
+                    {isExpired ? (
                       <TouchableOpacity
                         onPress={() => removeItem(item._id)}
-                        hitSlop={10}
-                        style={webOnly({ cursor: 'pointer' })}
+                        hitSlop={8}
+                        activeOpacity={0.85}
+                        style={[s.deleteBtn, webOnly({ cursor: 'pointer' })]}
                       >
-                        <Text style={[s.linkTxt, { color: colors.expired }]}>
-                          remove from fridge
-                        </Text>
+                        <Text style={s.deleteBtnTxt}>delete</Text>
                       </TouchableOpacity>
-                    </View>
+                    ) : (
+                      <Text style={s.openHint}>edit</Text>
+                    )}
                   </View>
-                )}
-              </View>
-            );
-          }}
-        />
-      </Animated.View>
+                </TouchableOpacity>
+              );
+            }}
+          />
+        </Animated.View>
       </View>
+
+      <BulkAddModal
+        visible={modalOpen}
+        mode="fridge"
+        saving={saving}
+        onClose={() => {
+          if (!saving) {
+            setModalOpen(false);
+            setError(null);
+          }
+        }}
+        onConfirm={handleBulkConfirm}
+      />
+
+      <DatePickerModal
+        visible={!!editingItem}
+        itemName={editingItem ? parseQuantity(editingItem.name).name : ''}
+        value={editingItem?.expiresAt ? new Date(editingItem.expiresAt) : undefined}
+        onSelect={(d) => editingItem && setExpiryDate(editingItem._id, d)}
+        onClear={
+          editingItem?.expiresAt ? () => clearExpiry(editingItem._id) : undefined
+        }
+        onRemove={() => editingItem && removeItem(editingItem._id)}
+        onClose={() => setEditingId(null)}
+      />
     </View>
   );
 }
@@ -226,6 +267,18 @@ export default function FridgeScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper, alignItems: 'center' },
   frame: { flex: 1, width: '100%', maxWidth: MAX_CONTENT },
+  ctaRow: {
+    paddingHorizontal: 28,
+    paddingTop: 4,
+    paddingBottom: 18,
+  },
+  errorRow: { paddingHorizontal: 28, paddingBottom: 12 },
+  errorTxt: {
+    fontFamily: FONT.serifItalic,
+    fontSize: 13,
+    color: colors.expired,
+  },
+
   list: { paddingBottom: 36 },
   divider: { height: 1, backgroundColor: colors.hairlineSoft, marginHorizontal: 28 },
   row: {
@@ -271,44 +324,32 @@ const s = StyleSheet.create({
     marginTop: 2,
   },
 
-  picker: {
-    paddingHorizontal: 28,
-    paddingTop: 4,
-    paddingBottom: 22,
-    backgroundColor: colors.paperWarm,
+  rowExpired: {
+    backgroundColor: colors.terracottaTint,
   },
-  pickerLabel: {
-    ...type_.eyebrow,
+  nameExpired: {
+    textDecorationLine: 'line-through',
     color: colors.inkSoft,
-    marginBottom: 10,
-    marginTop: 14,
   },
-  pickerChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
-  pickChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: radii.chip,
-    backgroundColor: colors.paper,
-    borderWidth: 1,
-    borderColor: colors.hairline,
-  },
-  pickChipTxt: {
+  expiredLabel: {
     fontFamily: FONT.sansSemi,
-    fontSize: 13,
-    color: colors.ink,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+    fontSize: 11,
+  },
+  deleteBtn: {
+    marginTop: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: radii.chip,
+    backgroundColor: colors.terracotta,
+  },
+  deleteBtnTxt: {
+    fontFamily: FONT.sansSemi,
+    fontSize: 11,
+    letterSpacing: 0.4,
+    color: colors.paper,
     textTransform: 'lowercase',
-    letterSpacing: 0.3,
-  },
-  pickerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginTop: 16,
-  },
-  linkTxt: {
-    fontFamily: FONT.serifItalic,
-    fontSize: 13,
-    color: colors.inkSoft,
-    textDecorationLine: 'underline',
   },
 
   empty: {

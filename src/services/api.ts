@@ -94,3 +94,41 @@ export async function deletePantryItem(id: string) {
 export async function getRecipeSuggestions() {
   return request('/api/recipes/suggestions', { method: 'POST' });
 }
+
+// Expiry classify + estimate
+export type ExpiryContext = 'bought' | 'made' | 'opened' | 'unrecognized';
+export type EstimateContext = Exclude<ExpiryContext, 'unrecognized'>;
+
+export interface ExpiryClassifyResult {
+  name: string;
+  context: ExpiryContext;
+}
+
+export async function classifyExpiryItems(
+  items: { name: string }[],
+): Promise<ExpiryClassifyResult[]> {
+  return request('/api/expiry/classify', {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  });
+}
+
+export interface ExpiryEstimateInput {
+  name: string;
+  daysAgo: number;
+  context?: EstimateContext;
+}
+
+export interface ExpiryEstimateResult {
+  name: string;
+  daysUntilExpiry: number;
+}
+
+export async function estimateExpiry(
+  items: ExpiryEstimateInput[],
+): Promise<ExpiryEstimateResult[]> {
+  return request('/api/expiry/estimate', {
+    method: 'POST',
+    body: JSON.stringify({ items }),
+  });
+}

@@ -89,7 +89,6 @@ export default function RecipesScreen() {
         ListEmptyComponent={
           !loading && !error ? (
             <View style={s.empty}>
-              <View style={s.emptyDot} />
               <Text style={s.emptyTitle}>
                 Nothing on the menu <Text style={s.emptyTitleAccent}>yet.</Text>
               </Text>
@@ -276,13 +275,6 @@ const s = StyleSheet.create({
   empty: {
     paddingHorizontal: 28,
     paddingTop: 24,
-  },
-  emptyDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 7,
-    backgroundColor: colors.terracotta,
-    marginBottom: 14,
   },
   emptyTitle: { ...type_.title, color: colors.ink },
   emptyTitleAccent: { fontFamily: FONT.serifItalic, color: colors.olive },
