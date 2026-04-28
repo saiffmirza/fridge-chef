@@ -1,14 +1,23 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View,
-  Text,
+  Animated,
+  Easing,
   FlatList,
-  TouchableOpacity,
+  Platform,
   StyleSheet,
-  Alert,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
-import { getFridgeItems, addFridgeItem, updateFridgeItem, deleteFridgeItem } from '../services/api';
+import {
+  addFridgeItem,
+  deleteFridgeItem,
+  getFridgeItems,
+  updateFridgeItem,
+} from '../services/api';
 import AddItemInput from '../components/AddItemInput';
+import ScreenHeader from '../components/ScreenHeader';
+import { colors, FONT, MAX_CONTENT, radii, type as type_, webOnly } from '../theme';
 
 interface FridgeItemData {
   _id: string;
@@ -17,12 +26,50 @@ interface FridgeItemData {
   addedAt: string;
 }
 
+const QUICK_PICKS: { label: string; days: number }[] = [
+  { label: 'today', days: 0 },
+  { label: 'tomorrow', days: 1 },
+  { label: '3 days', days: 3 },
+  { label: '1 week', days: 7 },
+  { label: '2 weeks', days: 14 },
+];
+
+function parseQuantity(raw: string): { name: string; qty?: string } {
+  const m = raw.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
+  if (!m) return { name: raw };
+  return { name: m[1].trim(), qty: m[2].trim() };
+}
+
+function expiryStatus(expiresAt?: string): {
+  label: string;
+  tone: 'fresh' | 'soon' | 'urgent' | 'expired' | 'none';
+} {
+  if (!expiresAt) return { label: 'no date', tone: 'none' };
+  const days = Math.ceil((new Date(expiresAt).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  if (days < 0) return { label: 'past', tone: 'expired' };
+  if (days === 0) return { label: 'today', tone: 'urgent' };
+  if (days === 1) return { label: 'tomorrow', tone: 'urgent' };
+  if (days <= 3) return { label: `${days} days`, tone: 'soon' };
+  return { label: `${days} days`, tone: 'fresh' };
+}
+
+const toneColor = {
+  fresh: colors.fresh,
+  soon: colors.warning,
+  urgent: colors.terracotta,
+  expired: colors.expired,
+  none: colors.inkFaint,
+} as const;
+
 export default function FridgeScreen() {
   const [items, setItems] = useState<FridgeItemData[]>([]);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const fade = useRef(new Animated.Value(0)).current;
 
   const load = useCallback(async () => {
     setItems(await getFridgeItems());
-  }, []);
+    Animated.timing(fade, { toValue: 1, duration: 380, easing: Easing.out(Easing.cubic), useNativeDriver: true }).start();
+  }, [fade]);
 
   useEffect(() => {
     load();
@@ -33,108 +80,249 @@ export default function FridgeScreen() {
     setItems((prev) => [item, ...prev]);
   };
 
-  const setExpiry = (item: FridgeItemData) => {
-    Alert.prompt(
-      'Set Expiry',
-      `Days until ${item.name} expires:`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Set',
-          onPress: async (days?: string) => {
-            if (!days) return;
-            const d = new Date();
-            d.setDate(d.getDate() + parseInt(days, 10));
-            const updated = await updateFridgeItem(item._id, { expiresAt: d.toISOString() });
-            setItems((prev) => prev.map((i) => (i._id === item._id ? updated : i)));
-          },
-        },
-      ],
-      'plain-text',
-      '',
-      'number-pad',
-    );
+  const setExpiryDays = async (id: string, days: number) => {
+    const d = new Date();
+    d.setDate(d.getDate() + days);
+    const updated = await updateFridgeItem(id, { expiresAt: d.toISOString() });
+    setItems((prev) => prev.map((i) => (i._id === id ? updated : i)));
+    setOpenId(null);
+  };
+
+  const clearExpiry = async (id: string) => {
+    const updated = await updateFridgeItem(id, { expiresAt: undefined });
+    setItems((prev) => prev.map((i) => (i._id === id ? updated : i)));
+    setOpenId(null);
   };
 
   const removeItem = async (id: string) => {
     await deleteFridgeItem(id);
     setItems((prev) => prev.filter((i) => i._id !== id));
+    if (openId === id) setOpenId(null);
   };
 
-  const getDaysUntilExpiry = (expiresAt?: string) => {
-    if (!expiresAt) return null;
-    const diff = new Date(expiresAt).getTime() - Date.now();
-    return Math.ceil(diff / (1000 * 60 * 60 * 24));
-  };
+  const sorted = useMemo(
+    () =>
+      [...items].sort((a, b) => {
+        if (!a.expiresAt && !b.expiresAt) return 0;
+        if (!a.expiresAt) return 1;
+        if (!b.expiresAt) return -1;
+        return new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime();
+      }),
+    [items],
+  );
 
-  const getExpiryColor = (days: number | null) => {
-    if (days === null) return '#888';
-    if (days <= 1) return '#f44336';
-    if (days <= 3) return '#FF9800';
-    return '#4CAF50';
-  };
+  const counts = useMemo(() => {
+    let urgent = 0;
+    items.forEach((i) => {
+      const t = expiryStatus(i.expiresAt).tone;
+      if (t === 'urgent' || t === 'expired') urgent += 1;
+    });
+    return { total: items.length, urgent };
+  }, [items]);
 
-  const sortedItems = [...items].sort((a, b) => {
-    if (!a.expiresAt && !b.expiresAt) return 0;
-    if (!a.expiresAt) return 1;
-    if (!b.expiresAt) return -1;
-    return new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime();
-  });
+  const hint =
+    counts.total === 0
+      ? 'a notebook for what is here, what is leaving soon, what to use first.'
+      : counts.urgent > 0
+        ? `${counts.urgent} ${counts.urgent === 1 ? 'thing wants' : 'things want'} cooking soon.`
+        : `${counts.total} ${counts.total === 1 ? 'thing' : 'things'} on hand. nothing urgent.`;
 
   return (
-    <View style={styles.container}>
-      <AddItemInput placeholder="Add item to fridge..." onAdd={handleAdd} mode="fridge" />
-      <FlatList
-        data={sortedItems}
-        keyExtractor={(item) => item._id}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => {
-          const days = getDaysUntilExpiry(item.expiresAt);
-          return (
-            <View style={styles.item}>
-              <TouchableOpacity style={styles.itemContent} onPress={() => setExpiry(item)}>
-                <Text style={styles.itemName}>{item.name}</Text>
-                <Text style={[styles.expiry, { color: getExpiryColor(days) }]}>
-                  {days !== null
-                    ? days <= 0
-                      ? 'Expired!'
-                      : `${days}d left`
-                    : 'Tap to set expiry'}
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity onPress={() => removeItem(item._id)}>
-                <Text style={styles.remove}>X</Text>
-              </TouchableOpacity>
+    <View style={s.root}>
+      <View style={s.frame}>
+      <ScreenHeader kicker="The Fridge" title="what's in." italic hint={hint} />
+
+      <AddItemInput placeholder="tomatoes, basil, half a lemon…" onAdd={handleAdd} mode="fridge" />
+
+      <Animated.View style={{ flex: 1, opacity: fade }}>
+        <FlatList
+          data={sorted}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={s.list}
+          keyboardShouldPersistTaps="handled"
+          ItemSeparatorComponent={() => <View style={s.divider} />}
+          ListEmptyComponent={
+            <View style={s.empty}>
+              <Text style={s.emptyTxt}>
+                Empty shelves.{'\n'}
+                <Text style={s.emptyTxtItalic}>add a few things from above to begin.</Text>
+              </Text>
             </View>
-          );
-        }}
-        ListEmptyComponent={
-          <Text style={styles.empty}>No items in your fridge. Add some above!</Text>
-        }
-      />
+          }
+          renderItem={({ item, index }) => {
+            const { name, qty } = parseQuantity(item.name);
+            const status = expiryStatus(item.expiresAt);
+            const isOpen = openId === item._id;
+            const num = String(index + 1).padStart(2, '0');
+            return (
+              <View>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => setOpenId(isOpen ? null : item._id)}
+                  style={[s.row, webOnly({ cursor: 'pointer' })]}
+                >
+                  <Text style={s.num}>{num}</Text>
+                  <View style={[s.dot, { backgroundColor: toneColor[status.tone] }]} />
+                  <View style={s.middle}>
+                    <Text style={s.name}>{name}</Text>
+                    {qty && <Text style={s.qty}>{qty}</Text>}
+                  </View>
+                  <View style={s.right}>
+                    <Text style={[s.expiry, { color: toneColor[status.tone] }]}>
+                      {status.label}
+                    </Text>
+                    <Text style={s.openHint}>{isOpen ? 'close' : 'edit'}</Text>
+                  </View>
+                </TouchableOpacity>
+
+                {isOpen && (
+                  <View style={s.picker}>
+                    <Text style={s.pickerLabel}>expires in</Text>
+                    <View style={s.pickerChips}>
+                      {QUICK_PICKS.map((p) => (
+                        <TouchableOpacity
+                          key={p.label}
+                          onPress={() => setExpiryDays(item._id, p.days)}
+                          activeOpacity={0.85}
+                          style={[s.pickChip, webOnly({ cursor: 'pointer' })]}
+                        >
+                          <Text style={s.pickChipTxt}>{p.label}</Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    <View style={s.pickerActions}>
+                      {item.expiresAt && (
+                        <TouchableOpacity
+                          onPress={() => clearExpiry(item._id)}
+                          hitSlop={10}
+                          style={webOnly({ cursor: 'pointer' })}
+                        >
+                          <Text style={s.linkTxt}>clear date</Text>
+                        </TouchableOpacity>
+                      )}
+                      <View style={{ flex: 1 }} />
+                      <TouchableOpacity
+                        onPress={() => removeItem(item._id)}
+                        hitSlop={10}
+                        style={webOnly({ cursor: 'pointer' })}
+                      >
+                        <Text style={[s.linkTxt, { color: colors.expired }]}>
+                          remove from fridge
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                )}
+              </View>
+            );
+          }}
+        />
+      </Animated.View>
+      </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  list: { padding: 12 },
-  item: {
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.paper, alignItems: 'center' },
+  frame: { flex: 1, width: '100%', maxWidth: MAX_CONTENT },
+  list: { paddingBottom: 36 },
+  divider: { height: 1, backgroundColor: colors.hairlineSoft, marginHorizontal: 28 },
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderRadius: 8,
-    padding: 14,
-    marginBottom: 8,
-    elevation: 1,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 2,
+    paddingHorizontal: 28,
+    paddingVertical: 18,
   },
-  itemContent: { flex: 1 },
-  itemName: { fontSize: 16, fontWeight: '500' },
-  expiry: { fontSize: 13, marginTop: 4 },
-  remove: { fontSize: 18, color: '#f44336', fontWeight: 'bold', paddingLeft: 12 },
-  empty: { textAlign: 'center', color: '#888', marginTop: 40, fontSize: 15 },
+  num: {
+    fontFamily: FONT.serifItalic,
+    fontSize: 13,
+    color: colors.inkFaint,
+    width: 26,
+  },
+  dot: {
+    width: 7,
+    height: 7,
+    borderRadius: 7,
+    marginRight: 14,
+  },
+  middle: { flex: 1, paddingRight: 12 },
+  name: {
+    ...type_.titleItalic,
+    color: colors.ink,
+  },
+  qty: {
+    fontFamily: FONT.sans,
+    fontSize: 12,
+    color: colors.inkFaint,
+    marginTop: 2,
+    letterSpacing: 0.2,
+  },
+  right: { alignItems: 'flex-end' },
+  expiry: {
+    fontFamily: FONT.sansSemi,
+    fontSize: 13,
+    letterSpacing: 0.3,
+  },
+  openHint: {
+    fontFamily: FONT.serifItalic,
+    fontSize: 11,
+    color: colors.inkFaint,
+    marginTop: 2,
+  },
+
+  picker: {
+    paddingHorizontal: 28,
+    paddingTop: 4,
+    paddingBottom: 22,
+    backgroundColor: colors.paperWarm,
+  },
+  pickerLabel: {
+    ...type_.eyebrow,
+    color: colors.inkSoft,
+    marginBottom: 10,
+    marginTop: 14,
+  },
+  pickerChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pickChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: radii.chip,
+    backgroundColor: colors.paper,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+  },
+  pickChipTxt: {
+    fontFamily: FONT.sansSemi,
+    fontSize: 13,
+    color: colors.ink,
+    textTransform: 'lowercase',
+    letterSpacing: 0.3,
+  },
+  pickerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 16,
+  },
+  linkTxt: {
+    fontFamily: FONT.serifItalic,
+    fontSize: 13,
+    color: colors.inkSoft,
+    textDecorationLine: 'underline',
+  },
+
+  empty: {
+    paddingHorizontal: 28,
+    paddingTop: 28,
+  },
+  emptyTxt: {
+    ...type_.title,
+    color: colors.inkSoft,
+  },
+  emptyTxtItalic: {
+    fontFamily: FONT.serifItalic,
+    color: colors.inkFaint,
+    fontSize: 18,
+    lineHeight: 28,
+  },
 });

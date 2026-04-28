@@ -1,13 +1,17 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import {
-  View,
-  Text,
+  Animated,
+  Easing,
   FlatList,
-  TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { getRecipeSuggestions } from '../services/api';
+import ScreenHeader from '../components/ScreenHeader';
+import PaperButton from '../components/PaperButton';
+import { colors, FONT, MAX_CONTENT, type as type_, webOnly } from '../theme';
 
 interface Recipe {
   title: string;
@@ -23,131 +27,273 @@ export default function RecipesScreen() {
   const [expanded, setExpanded] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const fade = useRef(new Animated.Value(0)).current;
 
   const findRecipes = async () => {
     setLoading(true);
     setError(null);
     setExpanded(null);
+    fade.setValue(0);
     try {
       const results = await getRecipeSuggestions();
       setRecipes(results);
-    } catch (e: any) {
-      setError(e.message || 'Something went wrong');
+      Animated.timing(fade, {
+        toValue: 1,
+        duration: 460,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }).start();
+    } catch (e) {
+      setError(e instanceof Error ? e.message.toLowerCase() : 'something went wrong');
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleExpand = (index: number) => {
-    setExpanded(expanded === index ? null : index);
-  };
-
   return (
-    <View style={styles.container}>
-      <TouchableOpacity style={styles.findButton} onPress={findRecipes} disabled={loading}>
-        {loading ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.findButtonText}>Find Recipes</Text>
-        )}
-      </TouchableOpacity>
+    <View style={s.root}>
+      <View style={s.frame}>
+      <ScreenHeader
+        kicker="Tonight"
+        title="what to cook."
+        italic
+        hint={
+          recipes.length > 0
+            ? 'tap any recipe for ingredients and steps.'
+            : 'a few recipes from what you have on hand. press below.'
+        }
+      />
 
-      {error && <Text style={styles.error}>{error}</Text>}
+      <View style={s.actionRow}>
+        <PaperButton
+          label={recipes.length === 0 ? 'cook something' : 'try again'}
+          trailing="→"
+          onPress={findRecipes}
+          loading={loading}
+          full
+        />
+      </View>
+
+      {error && (
+        <View style={s.errorBlock}>
+          <Text style={s.errorEyebrow}>something went sideways</Text>
+          <Text style={s.errorTxt}>{error}</Text>
+        </View>
+      )}
 
       <FlatList
         data={recipes}
-        keyExtractor={(_, index) => index.toString()}
-        contentContainerStyle={styles.list}
-        renderItem={({ item, index }) => (
-          <TouchableOpacity style={styles.card} onPress={() => toggleExpand(index)}>
-            <View style={styles.cardHeader}>
-              <Text style={styles.title}>{item.title}</Text>
-              <View style={styles.meta}>
-                {item.readyInMinutes != null && (
-                  <Text style={styles.time}>{item.readyInMinutes} min</Text>
-                )}
-                {(item.missingIngredients?.length ?? 0) > 0 && (
-                  <Text style={styles.missing}>
-                    {item.missingIngredients.length} missing
-                  </Text>
-                )}
-              </View>
-            </View>
-
-            {item.summary && <Text style={styles.summary}>{item.summary}</Text>}
-
-            {expanded === index && (
-              <View style={styles.details}>
-                {item.ingredients && item.ingredients.length > 0 && (
-                  <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Ingredients</Text>
-                    {item.ingredients.map((ing, i) => (
-                      <Text key={i} style={styles.listItem}>
-                        {item.missingIngredients?.includes(ing) ? '(missing) ' : ''}{ing}
-                      </Text>
-                    ))}
-                  </View>
-                )}
-
-                {item.instructions && (
-                  <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>Instructions</Text>
-                    <Text style={styles.instructions}>{item.instructions}</Text>
-                  </View>
-                )}
-              </View>
-            )}
-          </TouchableOpacity>
-        )}
+        keyExtractor={(_, index) => String(index)}
+        contentContainerStyle={s.list}
+        ItemSeparatorComponent={() => <View style={s.divider} />}
         ListEmptyComponent={
           !loading && !error ? (
-            <Text style={styles.empty}>
-              Tap "Find Recipes" to get AI-powered suggestions based on your ingredients.
-            </Text>
+            <View style={s.empty}>
+              <View style={s.emptyDot} />
+              <Text style={s.emptyTitle}>
+                Nothing on the menu <Text style={s.emptyTitleAccent}>yet.</Text>
+              </Text>
+              <Text style={s.emptyBody}>
+                Suggestions appear here, sorted from quickest to longest. Add a few things to your
+                fridge or pantry first, then tap{' '}
+                <Text style={s.emptyTextAccent}>cook something</Text>.
+              </Text>
+            </View>
           ) : null
         }
+        renderItem={({ item, index }) => {
+          const isOpen = expanded === index;
+          const num = String(index + 1).padStart(2, '0');
+          const missing = item.missingIngredients ?? [];
+          return (
+            <Animated.View style={{ opacity: fade }}>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={() => setExpanded(isOpen ? null : index)}
+                style={[s.entry, webOnly({ cursor: 'pointer' })]}
+              >
+                <View style={s.entryHead}>
+                  <Text style={s.entryNum}>no. {num}</Text>
+                  <View style={s.entryDots}>
+                    <Text style={s.metaTxt}>
+                      {item.readyInMinutes != null ? `${item.readyInMinutes} min` : ''}
+                    </Text>
+                    {missing.length > 0 && (
+                      <>
+                        <Text style={s.metaSep}> · </Text>
+                        <Text style={[s.metaTxt, { color: colors.warning }]}>
+                          {missing.length} missing
+                        </Text>
+                      </>
+                    )}
+                  </View>
+                </View>
+
+                <Text style={s.title}>{item.title}</Text>
+
+                {item.summary ? (
+                  <Text style={s.summary}>{item.summary}</Text>
+                ) : null}
+
+                <Text style={s.toggle}>{isOpen ? 'close' : 'read more →'}</Text>
+
+                {isOpen && (
+                  <View style={s.details}>
+                    {item.ingredients?.length > 0 && (
+                      <View style={s.section}>
+                        <Text style={s.sectionLabel}>ingredients</Text>
+                        <View style={s.sectionRule} />
+                        {item.ingredients.map((ing, i) => {
+                          const isMissing = missing.includes(ing);
+                          return (
+                            <View key={i} style={s.ingRow}>
+                              <Text style={s.ingDash}>·</Text>
+                              <Text style={[s.ingTxt, isMissing && s.ingMissing]}>
+                                {ing}
+                                {isMissing ? <Text style={s.missingTag}>  · need</Text> : null}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    )}
+
+                    {item.instructions ? (
+                      <View style={s.section}>
+                        <Text style={s.sectionLabel}>method</Text>
+                        <View style={s.sectionRule} />
+                        <Text style={s.instructions}>{item.instructions}</Text>
+                      </View>
+                    ) : null}
+                  </View>
+                )}
+              </TouchableOpacity>
+            </Animated.View>
+          );
+        }}
       />
+      </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f5f5f5' },
-  findButton: {
-    backgroundColor: '#4CAF50',
-    margin: 12,
-    padding: 16,
-    borderRadius: 10,
-    alignItems: 'center',
+const s = StyleSheet.create({
+  root: { flex: 1, backgroundColor: colors.paper, alignItems: 'center' },
+  frame: { flex: 1, width: '100%', maxWidth: MAX_CONTENT },
+  actionRow: {
+    paddingHorizontal: 28,
+    paddingTop: 4,
+    paddingBottom: 18,
   },
-  findButtonText: { color: '#fff', fontSize: 18, fontWeight: '700' },
-  error: { color: '#f44336', textAlign: 'center', marginHorizontal: 12, marginBottom: 8 },
-  list: { padding: 12 },
-  card: {
-    backgroundColor: '#fff',
-    borderRadius: 10,
-    marginBottom: 12,
-    padding: 14,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.15,
-    shadowRadius: 3,
+  list: { paddingBottom: 48 },
+  divider: { height: 1, backgroundColor: colors.hairline, marginHorizontal: 28, marginVertical: 4 },
+
+  errorBlock: { paddingHorizontal: 28, paddingVertical: 18 },
+  errorEyebrow: { ...type_.eyebrow, color: colors.expired },
+  errorTxt: {
+    fontFamily: FONT.serifItalic,
+    fontSize: 16,
+    color: colors.expired,
+    marginTop: 4,
   },
-  cardHeader: {
+
+  entry: {
+    paddingHorizontal: 28,
+    paddingVertical: 22,
+  },
+  entryHead: {
     flexDirection: 'row',
+    alignItems: 'center',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    marginBottom: 10,
   },
-  title: { fontSize: 16, fontWeight: '600', flex: 1, marginRight: 8 },
-  meta: { alignItems: 'flex-end' },
-  time: { fontSize: 14, color: '#4CAF50', fontWeight: '600' },
-  missing: { fontSize: 12, color: '#FF9800', marginTop: 2 },
-  summary: { fontSize: 14, color: '#555', marginTop: 8 },
-  details: { marginTop: 12, borderTopWidth: 1, borderTopColor: '#eee', paddingTop: 12 },
-  section: { marginBottom: 12 },
-  sectionTitle: { fontSize: 14, fontWeight: '700', marginBottom: 6, color: '#333' },
-  listItem: { fontSize: 14, color: '#444', marginLeft: 8, marginBottom: 3 },
-  instructions: { fontSize: 14, color: '#444', lineHeight: 22 },
-  empty: { textAlign: 'center', color: '#888', marginTop: 40, fontSize: 15, paddingHorizontal: 20 },
+  entryNum: {
+    fontFamily: FONT.serifItalic,
+    fontSize: 13,
+    color: colors.inkFaint,
+    letterSpacing: 0.6,
+  },
+  entryDots: { flexDirection: 'row', alignItems: 'center' },
+  metaTxt: {
+    fontFamily: FONT.sansSemi,
+    fontSize: 11.5,
+    letterSpacing: 1.2,
+    color: colors.olive,
+    textTransform: 'uppercase',
+  },
+  metaSep: { color: colors.inkFaint, fontSize: 12 },
+  title: {
+    fontFamily: FONT.serifBold,
+    fontSize: 28,
+    lineHeight: 32,
+    letterSpacing: -0.6,
+    color: colors.ink,
+  },
+  summary: {
+    ...type_.subtitle,
+    color: colors.inkSoft,
+    marginTop: 8,
+  },
+  toggle: {
+    fontFamily: FONT.serifItalic,
+    fontSize: 13,
+    color: colors.terracotta,
+    marginTop: 14,
+    textDecorationLine: 'underline',
+  },
+
+  details: { marginTop: 16 },
+  section: { marginTop: 18 },
+  sectionLabel: { ...type_.eyebrow, color: colors.terracotta },
+  sectionRule: { height: 1, backgroundColor: colors.hairline, marginTop: 6, marginBottom: 12 },
+  ingRow: { flexDirection: 'row', marginBottom: 6 },
+  ingDash: {
+    fontFamily: FONT.serif,
+    fontSize: 14,
+    color: colors.inkFaint,
+    width: 18,
+  },
+  ingTxt: {
+    flex: 1,
+    fontFamily: FONT.sans,
+    fontSize: 15,
+    lineHeight: 22,
+    color: colors.ink,
+  },
+  ingMissing: { color: colors.inkSoft },
+  missingTag: {
+    fontFamily: FONT.serifItalic,
+    color: colors.warning,
+    fontSize: 12,
+  },
+  instructions: {
+    fontFamily: FONT.sans,
+    fontSize: 15,
+    lineHeight: 24,
+    color: colors.ink,
+  },
+
+  empty: {
+    paddingHorizontal: 28,
+    paddingTop: 24,
+  },
+  emptyDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 7,
+    backgroundColor: colors.terracotta,
+    marginBottom: 14,
+  },
+  emptyTitle: { ...type_.title, color: colors.ink },
+  emptyTitleAccent: { fontFamily: FONT.serifItalic, color: colors.olive },
+  emptyBody: {
+    ...type_.bodyL,
+    color: colors.inkSoft,
+    marginTop: 10,
+    maxWidth: 420,
+  },
+  emptyTextAccent: {
+    fontFamily: FONT.serifItalic,
+    color: colors.terracotta,
+  },
 });

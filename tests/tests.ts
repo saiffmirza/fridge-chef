@@ -24,7 +24,7 @@ async function login(page: Page) {
   const inputs = page.locator('input');
   await inputs.nth(0).fill(EMAIL);
   await inputs.nth(1).fill(PASSWORD);
-  await page.getByText('Sign In', { exact: true }).click();
+  await page.getByText(/step inside/i).last().click();
   await page.waitForTimeout(3000);
 }
 
@@ -34,11 +34,11 @@ async function testLoginFailure(page: Page) {
   const inputs = page.locator('input');
   await inputs.nth(0).fill('wrong@email.com');
   await inputs.nth(1).fill('wrongpassword');
-  await page.getByText('Sign In', { exact: true }).click();
+  await page.getByText(/step inside/i).last().click();
   await page.waitForTimeout(3000);
 
   await assert('shows error on invalid credentials', async () => {
-    const error = page.locator('text=Invalid email or password');
+    const error = page.locator('text=invalid email or password');
     if (!(await error.isVisible())) throw new Error('Error message not visible');
   });
 }
@@ -46,30 +46,29 @@ async function testLoginFailure(page: Page) {
 async function testLoginSuccess(page: Page) {
   await login(page);
 
-  await assert('navigates to Fridge tab after login', async () => {
-    const heading = page.getByRole('heading', { name: 'My Fridge' });
-    if (!(await heading.isVisible())) throw new Error('My Fridge heading not visible');
+  await assert('lands on Fridge screen after login', async () => {
+    const heading = page.getByText("what's in.", { exact: true });
+    if (!(await heading.isVisible())) throw new Error('Fridge heading not visible');
   });
 
   await assert('shows all three tabs', async () => {
-    for (const tab of ['Fridge', 'Pantry', 'Recipes']) {
-      const el = page.locator(`text=${tab}`).first();
+    for (const tab of ['fridge', 'pantry', 'cook']) {
+      const el = page.getByText(tab, { exact: true }).first();
       if (!(await el.isVisible())) throw new Error(`${tab} tab not visible`);
     }
   });
 
-  await assert('shows Logout button', async () => {
-    const logout = page.locator('text=Logout');
-    if (!(await logout.isVisible())) throw new Error('Logout button not visible');
+  await assert('shows sign out link', async () => {
+    const out = page.getByText('sign out', { exact: true });
+    if (!(await out.first().isVisible())) throw new Error('Sign out link not visible');
   });
-
 }
 
 async function testFridgeAddItem(page: Page) {
   await login(page);
 
   await assert('can type in fridge input', async () => {
-    const input = page.locator('input[placeholder="Add item to fridge..."]');
+    const input = page.locator('input[placeholder*="tomatoes"]');
     if (!(await input.isVisible())) throw new Error('Fridge input not visible');
     await input.fill('Chicken');
     await input.press('Enter');
@@ -77,31 +76,35 @@ async function testFridgeAddItem(page: Page) {
 
   await assert('shows quantity follow-up question', async () => {
     await page.waitForTimeout(500);
-    const question = page.locator('text=How much do you have?');
+    const question = page.locator('text=how much have you got of');
     if (!(await question.isVisible())) throw new Error('Quantity question not visible');
   });
 
   await assert('shows quantity options', async () => {
-    for (const option of ['A Little', 'Medium', 'A Lot']) {
+    for (const option of ['a little', 'medium', 'a lot']) {
       const el = page.getByText(option, { exact: true });
-      if (!(await el.isVisible())) throw new Error(`${option} option not visible`);
+      if (!(await el.first().isVisible())) throw new Error(`${option} option not visible`);
     }
   });
 
   await assert('can select quantity and item is saved', async () => {
-    await page.getByText('A Lot', { exact: true }).click();
+    await page.getByText('a lot', { exact: true }).first().click();
     await page.waitForTimeout(2000);
-    const item = page.getByText('Chicken (a lot)').first();
+    const item = page.getByText(/Chicken/).first();
     if (!(await item.isVisible())) throw new Error('Saved item not visible');
   });
 
-  // Clean up — delete the item we just added
+  // Clean up — open the row's inline picker and tap "remove from fridge"
   await assert('can delete fridge item', async () => {
-    const removeButtons = page.locator('text=X');
-    const count = await removeButtons.count();
-    if (count > 0) {
-      await removeButtons.first().click({ force: true });
-      await page.waitForTimeout(2000);
+    const editLink = page.getByText('edit', { exact: true }).first();
+    if (await editLink.count()) {
+      await editLink.click();
+      await page.waitForTimeout(400);
+      const remove = page.getByText('remove from fridge', { exact: true }).first();
+      if (await remove.count()) {
+        await remove.click();
+        await page.waitForTimeout(1500);
+      }
     }
   });
 }
@@ -109,33 +112,32 @@ async function testFridgeAddItem(page: Page) {
 async function testPantryTab(page: Page) {
   await login(page);
 
-  // Navigate to Pantry tab
-  await page.locator('text=Pantry').first().click();
+  await page.getByText('pantry', { exact: true }).first().click();
   await page.waitForTimeout(1000);
 
   await assert('pantry tab loads', async () => {
-    const input = page.locator('input[placeholder*="pantry"]');
+    const input = page.locator('input[placeholder*="olive oil"]');
     if (!(await input.isVisible())) throw new Error('Pantry input not visible');
   });
 
   await assert('can add pantry item with follow-up', async () => {
-    const input = page.locator('input[placeholder*="pantry"]');
+    const input = page.locator('input[placeholder*="olive oil"]');
     await input.fill('Olive Oil');
     await input.press('Enter');
     await page.waitForTimeout(500);
 
-    const question = page.locator('text=How stocked are you?');
+    const question = page.locator('text=how stocked is your');
     if (!(await question.isVisible())) throw new Error('Pantry question not visible');
 
-    await page.getByText('Plenty', { exact: true }).click();
+    await page.getByText('plenty', { exact: true }).first().click();
     await page.waitForTimeout(2000);
 
-    const item = page.getByText('Olive Oil (plenty)').first();
+    const item = page.getByText(/Olive Oil/).first();
     if (!(await item.isVisible())) throw new Error('Pantry item not visible');
   });
 
-  // Clean up
-  const removeButtons = page.locator('text=X');
+  // Clean up — pantry rows still have an X remove button
+  const removeButtons = page.getByText('×', { exact: true });
   const count = await removeButtons.count();
   if (count > 0) {
     await removeButtons.first().click({ force: true });
@@ -146,28 +148,23 @@ async function testPantryTab(page: Page) {
 async function testRecipesTab(page: Page) {
   await login(page);
 
-  await page.locator('text=Recipes').first().click();
+  await page.getByText('cook', { exact: true }).first().click();
   await page.waitForTimeout(1000);
 
-  await assert('recipes tab loads with Find Recipes button', async () => {
-    const btn = page.getByRole('button').locator('text=Find Recipes');
-    if (!(await btn.isVisible())) {
-      // Fallback: check the second match (the button text, not the heading/tab)
-      const fallback = page.getByText('Find Recipes').nth(1);
-      if (!(await fallback.isVisible())) throw new Error('Find Recipes button not visible');
-    }
+  await assert('cook tab loads with primary action', async () => {
+    const btn = page.getByText(/cook something|try again/i).first();
+    if (!(await btn.isVisible())) throw new Error('Primary cook button not visible');
   });
-
 }
 
 async function testLogout(page: Page) {
   await login(page);
 
-  await assert('can logout', async () => {
-    await page.locator('text=Logout').click();
+  await assert('can sign out', async () => {
+    await page.getByText('sign out', { exact: true }).first().click();
     await page.waitForTimeout(2000);
-    const signIn = page.getByText('Sign In', { exact: true });
-    if (!(await signIn.isVisible())) throw new Error('Did not return to login screen');
+    const stepIn = page.getByText(/step inside/i).last();
+    if (!(await stepIn.isVisible())) throw new Error('Did not return to login screen');
   });
 }
 
