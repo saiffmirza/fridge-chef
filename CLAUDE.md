@@ -3,7 +3,7 @@
 ## Git & Commits
 - Do NOT include `Co-Authored-By` lines in commit messages
 - Use conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`
-- Commit when changes are coherent, but DO NOT push automatically — wait for an explicit "push" from the user
+- DO NOT commit or push unless the user explicitly asks. Both `git commit` and `git push` are user-triggered actions.
 - Stage specific files, not `git add -A`, to avoid committing secrets
 
 ## Code Standards
