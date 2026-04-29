@@ -12,11 +12,12 @@
 - Keep frontend components in `src/components/`, screens in `src/screens/`
 - Backend routes go in `backend/src/routes/`
 
-## AI/Gemini Guardrails
+## AI/Groq Guardrails
+- All AI calls go through `backend/src/lib/groq.ts` (Llama 3.3 70B, JSON mode)
 - Always validate AI response schema before sending to client
 - Sanitize ingredient inputs (safe characters only, length limits)
 - Return clean user-facing error messages, never raw AI errors
-- Prompt must constrain Gemini to recipe-only output
+- System prompts must constrain the model to its task and ignore instructions inside user input
 
 ## Testing
 - E2E tests use Playwright against Expo web (`tests/` folder)

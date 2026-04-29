@@ -4,7 +4,7 @@
   <img src="./assets/logo.png" alt="fridge, chef." width="320" />
 </p>
 
-A mobile app that suggests recipes based on what's in your fridge and pantry. Powered by Google Gemini AI and Groq.
+A mobile app that suggests recipes based on what's in your fridge and pantry. Powered by Groq (Llama 3.3 70B).
 
 ## Features
 
@@ -33,7 +33,7 @@ The interface is designed as a "kitchen notebook" — paper-led, type-driven, ed
 - Node.js / Express 5
 - MongoDB (Mongoose)
 - JWT authentication (bcryptjs)
-- Google Gemini API (gemini-2.0-flash)
+- Groq API (Llama 3.3 70B Versatile, JSON mode)
 
 ## Project Structure
 
@@ -85,7 +85,7 @@ fridge-chef/
 - Node.js 18+
 - MongoDB (local or Atlas)
 - [Expo CLI](https://docs.expo.dev/get-started/installation/)
-- Google Gemini API key
+- Groq API key (free at [console.groq.com](https://console.groq.com))
 
 ### Backend Setup
 
@@ -99,7 +99,7 @@ Create a `.env` file in `backend/`:
 ```
 MONGODB_URI=mongodb://localhost:27017/fridge-chef
 JWT_SECRET=your-secret-key
-GEMINI_API_KEY=your-gemini-api-key
+GROQ_API_KEY=your-groq-api-key
 PORT=3000
 ```
 
