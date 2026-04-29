@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -8,9 +8,17 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { getRecipeSuggestions } from '../services/api';
+import {
+  deleteSavedRecipe,
+  getRecipeSuggestions,
+  getSavedRecipes,
+  saveRecipe,
+  SavedRecipeRecord,
+} from '../services/api';
 import ScreenHeader from '../components/ScreenHeader';
 import PaperButton from '../components/PaperButton';
+import RecipeDetailModal, { RecipeDetail } from '../components/RecipeDetailModal';
+import SavedRecipesModal from '../components/SavedRecipesModal';
 import { colors, FONT, MAX_CONTENT, type as type_, webOnly } from '../theme';
 
 interface Ingredient {
@@ -28,17 +36,46 @@ interface Recipe {
   missingCount: number;
 }
 
+type DetailSource = { type: 'generated'; index: number } | { type: 'saved'; id: string };
+
 export default function RecipesScreen() {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
-  const [expanded, setExpanded] = useState<number | null>(null);
+  const [savedList, setSavedList] = useState<SavedRecipeRecord[]>([]);
+  const [savedIds, setSavedIds] = useState<Record<number, string>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = useState(false);
+  const [detailRecipe, setDetailRecipe] = useState<RecipeDetail | null>(null);
+  const [detailSource, setDetailSource] = useState<DetailSource | null>(null);
+  const [savedModalOpen, setSavedModalOpen] = useState(false);
   const fade = useRef(new Animated.Value(0)).current;
+
+  const loadSaved = useCallback(async () => {
+    try {
+      const list = await getSavedRecipes();
+      setSavedList(list);
+    } catch {
+      // non-blocking — saved list is a nice-to-have
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSaved();
+  }, [loadSaved]);
+
+  // Reconcile saved-state for generated recipes whenever either list changes
+  useEffect(() => {
+    const next: Record<number, string> = {};
+    recipes.forEach((r, i) => {
+      const match = savedList.find((s) => s.title === r.title);
+      if (match) next[i] = match._id;
+    });
+    setSavedIds(next);
+  }, [recipes, savedList]);
 
   const findRecipes = async () => {
     setLoading(true);
     setError(null);
-    setExpanded(null);
     fade.setValue(0);
     try {
       const results = await getRecipeSuggestions();
@@ -56,138 +93,241 @@ export default function RecipesScreen() {
     }
   };
 
+  const openGenerated = (index: number) => {
+    setDetailRecipe(recipes[index]);
+    setDetailSource({ type: 'generated', index });
+    setDetailOpen(true);
+  };
+
+  const openSaved = (saved: SavedRecipeRecord) => {
+    setDetailRecipe({
+      title: saved.title,
+      readyInMinutes: saved.readyInMinutes,
+      summary: saved.summary,
+      ingredients: saved.ingredients,
+      steps: saved.steps,
+    });
+    setDetailSource({ type: 'saved', id: saved._id });
+    setDetailOpen(true);
+  };
+
+  const handleSaveFromGenerated = async (index: number) => {
+    const r = recipes[index];
+    if (!r) return;
+    try {
+      const created = await saveRecipe({
+        title: r.title,
+        readyInMinutes: r.readyInMinutes,
+        summary: r.summary,
+        ingredients: r.ingredients,
+        steps: r.steps,
+      });
+      setSavedIds((prev) => ({ ...prev, [index]: created._id }));
+      setSavedList((prev) => [created, ...prev]);
+    } catch {
+      // swallow; silent failure for non-blocking action
+    }
+  };
+
+  const handleUnsaveFromGenerated = async (index: number) => {
+    const id = savedIds[index];
+    if (!id) return;
+    try {
+      await deleteSavedRecipe(id);
+      setSavedIds((prev) => {
+        const next = { ...prev };
+        delete next[index];
+        return next;
+      });
+      setSavedList((prev) => prev.filter((s) => s._id !== id));
+    } catch {
+      /* noop */
+    }
+  };
+
+  const handleUnsaveFromSaved = async (id: string) => {
+    try {
+      await deleteSavedRecipe(id);
+      setSavedList((prev) => prev.filter((s) => s._id !== id));
+      // Also clear from savedIds if present
+      setSavedIds((prev) => {
+        const next: Record<number, string> = {};
+        Object.entries(prev).forEach(([k, v]) => {
+          if (v !== id) next[Number(k)] = v;
+        });
+        return next;
+      });
+    } catch {
+      /* noop */
+    }
+  };
+
+  const detailSaved =
+    detailSource?.type === 'generated'
+      ? Boolean(savedIds[detailSource.index])
+      : detailSource?.type === 'saved';
+
+  const handleDetailSave = async () => {
+    if (!detailSource || !detailRecipe) return;
+    if (detailSource.type === 'generated') {
+      await handleSaveFromGenerated(detailSource.index);
+    }
+  };
+
+  const handleDetailUnsave = async () => {
+    if (!detailSource) return;
+    if (detailSource.type === 'generated') {
+      await handleUnsaveFromGenerated(detailSource.index);
+    } else {
+      await handleUnsaveFromSaved(detailSource.id);
+      setDetailOpen(false);
+    }
+  };
+
+  const showSavedLink = savedList.length >= 2;
+
   return (
     <View style={s.root}>
       <View style={s.frame}>
-      <ScreenHeader
-        kicker="Tonight"
-        title="what to cook."
-        italic
-        hint={
-          recipes.length > 0
-            ? 'tap any recipe for ingredients and steps.'
-            : 'a few recipes from what you have on hand. press below.'
-        }
-      />
+        <ScreenHeader
+          kicker="Tonight"
+          title="what to cook."
+          italic
+          hint={
+            recipes.length > 0
+              ? 'tap any recipe to read the full method.'
+              : 'a few recipes from what you have on hand. press below.'
+          }
+        />
 
-      <View style={s.actionRow}>
-        <PaperButton
-          label={recipes.length === 0 ? 'cook something' : 'try again'}
-          trailing="→"
-          onPress={findRecipes}
-          loading={loading}
-          full
+        {showSavedLink && (
+          <View style={s.savedRow}>
+            <TouchableOpacity
+              onPress={() => setSavedModalOpen(true)}
+              hitSlop={10}
+              style={[s.savedLink, webOnly({ cursor: 'pointer' })]}
+            >
+              <Text style={s.savedLinkTxt}>
+                saved <Text style={s.savedCount}>({savedList.length})</Text> →
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={s.actionRow}>
+          <PaperButton
+            label={recipes.length === 0 ? 'cook something' : 'try again'}
+            trailing="→"
+            onPress={findRecipes}
+            loading={loading}
+            full
+          />
+        </View>
+
+        {error && (
+          <View style={s.errorBlock}>
+            <Text style={s.errorEyebrow}>something went sideways</Text>
+            <Text style={s.errorTxt}>{error}</Text>
+          </View>
+        )}
+
+        <FlatList
+          data={recipes}
+          keyExtractor={(_, index) => String(index)}
+          contentContainerStyle={s.list}
+          ItemSeparatorComponent={() => <View style={s.divider} />}
+          ListEmptyComponent={
+            !loading && !error ? (
+              <View style={s.empty}>
+                <Text style={s.emptyTitle}>
+                  Nothing on the menu <Text style={s.emptyTitleAccent}>yet.</Text>
+                </Text>
+                <Text style={s.emptyBody}>
+                  Suggestions appear here, sorted from quickest to longest. Add a few things to your
+                  fridge or pantry first, then tap{' '}
+                  <Text style={s.emptyTextAccent}>cook something</Text>.
+                </Text>
+              </View>
+            ) : null
+          }
+          renderItem={({ item, index }) => {
+            const num = String(index + 1).padStart(2, '0');
+            const missingCount = item.missingCount ?? item.ingredients.filter((i) => i.missing).length;
+            const isSaved = Boolean(savedIds[index]);
+            return (
+              <Animated.View style={{ opacity: fade }}>
+                <View style={s.entry}>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => openGenerated(index)}
+                    style={webOnly({ cursor: 'pointer' })}
+                  >
+                    <View style={s.entryHead}>
+                      <Text style={s.entryNum}>no. {num}</Text>
+                      <View style={s.entryDots}>
+                        <Text style={s.metaTxt}>
+                          {item.readyInMinutes != null ? `${item.readyInMinutes} min` : ''}
+                        </Text>
+                        {missingCount > 0 && (
+                          <>
+                            <Text style={s.metaSep}> · </Text>
+                            <Text style={[s.metaTxt, { color: colors.warning }]}>
+                              +{missingCount}
+                              <Text style={s.metaStar}>*</Text>
+                            </Text>
+                          </>
+                        )}
+                      </View>
+                    </View>
+
+                    <Text style={s.title}>{item.title}</Text>
+                    {item.summary ? <Text style={s.summary}>{item.summary}</Text> : null}
+                  </TouchableOpacity>
+
+                  <View style={s.entryFoot}>
+                    <Text style={s.openTxt} onPress={() => openGenerated(index)}>
+                      read more →
+                    </Text>
+                    <TouchableOpacity
+                      onPress={() =>
+                        isSaved ? handleUnsaveFromGenerated(index) : handleSaveFromGenerated(index)
+                      }
+                      hitSlop={10}
+                      style={webOnly({ cursor: 'pointer' })}
+                    >
+                      <Text style={[s.saveTxt, isSaved && s.saveTxtActive]}>
+                        {isSaved ? 'saved ✓' : 'save'}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </Animated.View>
+            );
+          }}
         />
       </View>
 
-      {error && (
-        <View style={s.errorBlock}>
-          <Text style={s.errorEyebrow}>something went sideways</Text>
-          <Text style={s.errorTxt}>{error}</Text>
-        </View>
-      )}
-
-      <FlatList
-        data={recipes}
-        keyExtractor={(_, index) => String(index)}
-        contentContainerStyle={s.list}
-        ItemSeparatorComponent={() => <View style={s.divider} />}
-        ListEmptyComponent={
-          !loading && !error ? (
-            <View style={s.empty}>
-              <Text style={s.emptyTitle}>
-                Nothing on the menu <Text style={s.emptyTitleAccent}>yet.</Text>
-              </Text>
-              <Text style={s.emptyBody}>
-                Suggestions appear here, sorted from quickest to longest. Add a few things to your
-                fridge or pantry first, then tap{' '}
-                <Text style={s.emptyTextAccent}>cook something</Text>.
-              </Text>
-            </View>
-          ) : null
-        }
-        renderItem={({ item, index }) => {
-          const isOpen = expanded === index;
-          const num = String(index + 1).padStart(2, '0');
-          const missingCount = item.missingCount ?? item.ingredients.filter((i) => i.missing).length;
-          return (
-            <Animated.View style={{ opacity: fade }}>
-              <TouchableOpacity
-                activeOpacity={0.7}
-                onPress={() => setExpanded(isOpen ? null : index)}
-                style={[s.entry, webOnly({ cursor: 'pointer' })]}
-              >
-                <View style={s.entryHead}>
-                  <Text style={s.entryNum}>no. {num}</Text>
-                  <View style={s.entryDots}>
-                    <Text style={s.metaTxt}>
-                      {item.readyInMinutes != null ? `${item.readyInMinutes} min` : ''}
-                    </Text>
-                    {missingCount > 0 && (
-                      <>
-                        <Text style={s.metaSep}> · </Text>
-                        <Text style={[s.metaTxt, { color: colors.warning }]}>
-                          +{missingCount}
-                          <Text style={s.metaStar}>*</Text>
-                        </Text>
-                      </>
-                    )}
-                  </View>
-                </View>
-
-                <Text style={s.title}>{item.title}</Text>
-
-                {item.summary ? (
-                  <Text style={s.summary}>{item.summary}</Text>
-                ) : null}
-
-                <Text style={s.toggle}>{isOpen ? 'close' : 'read more →'}</Text>
-
-                {isOpen && (
-                  <View style={s.details}>
-                    {item.ingredients?.length > 0 && (
-                      <View style={s.section}>
-                        <Text style={s.sectionLabel}>ingredients</Text>
-                        <View style={s.sectionRule} />
-                        {item.ingredients.map((ing, i) => (
-                          <View key={i} style={s.ingRow}>
-                            <Text style={s.ingDash}>·</Text>
-                            <View style={s.ingBody}>
-                              <Text style={[s.ingTxt, ing.missing && s.ingMissingTxt]}>
-                                {ing.text}
-                                {ing.missing && <Text style={s.ingStar}>*</Text>}
-                              </Text>
-                              {ing.missing && ing.alternatives.length > 0 && (
-                                <Text style={s.altTxt}>
-                                  <Text style={s.altStar}>*</Text>or {ing.alternatives.join(', ')}
-                                </Text>
-                              )}
-                            </View>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-
-                    {item.steps?.length > 0 && (
-                      <View style={s.section}>
-                        <Text style={s.sectionLabel}>method</Text>
-                        <View style={s.sectionRule} />
-                        {item.steps.map((step, i) => (
-                          <View key={i} style={s.stepRow}>
-                            <Text style={s.stepNum}>{String(i + 1).padStart(2, '0')}</Text>
-                            <Text style={s.stepTxt}>{step}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                )}
-              </TouchableOpacity>
-            </Animated.View>
-          );
-        }}
+      <RecipeDetailModal
+        visible={detailOpen}
+        recipe={detailRecipe}
+        index={detailSource?.type === 'generated' ? detailSource.index : undefined}
+        saved={detailSaved}
+        onSave={handleDetailSave}
+        onUnsave={handleDetailUnsave}
+        onClose={() => setDetailOpen(false)}
       />
-      </View>
+
+      <SavedRecipesModal
+        visible={savedModalOpen}
+        recipes={savedList}
+        onClose={() => setSavedModalOpen(false)}
+        onSelect={(r) => {
+          setSavedModalOpen(false);
+          // Slight delay so the saved modal close animation can begin before opening detail
+          setTimeout(() => openSaved(r), 100);
+        }}
+        onDelete={handleUnsaveFromSaved}
+      />
     </View>
   );
 }
@@ -195,6 +335,20 @@ export default function RecipesScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper, alignItems: 'center' },
   frame: { flex: 1, width: '100%', maxWidth: MAX_CONTENT },
+  savedRow: {
+    paddingHorizontal: 28,
+    paddingTop: 0,
+    paddingBottom: 8,
+    alignItems: 'flex-end',
+  },
+  savedLink: {},
+  savedLinkTxt: {
+    fontFamily: FONT.serifItalic,
+    fontSize: 14,
+    color: colors.terracotta,
+    textDecorationLine: 'underline',
+  },
+  savedCount: { color: colors.inkSoft, textDecorationLine: 'none' },
   actionRow: {
     paddingHorizontal: 28,
     paddingTop: 4,
@@ -237,6 +391,10 @@ const s = StyleSheet.create({
     textTransform: 'uppercase',
   },
   metaSep: { color: colors.inkFaint, fontSize: 12 },
+  metaStar: {
+    fontFamily: FONT.serifBold,
+    color: colors.terracotta,
+  },
   title: {
     fontFamily: FONT.serifBold,
     fontSize: 28,
@@ -249,71 +407,27 @@ const s = StyleSheet.create({
     color: colors.inkSoft,
     marginTop: 8,
   },
-  toggle: {
+  entryFoot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 14,
+  },
+  openTxt: {
     fontFamily: FONT.serifItalic,
     fontSize: 13,
     color: colors.terracotta,
-    marginTop: 14,
     textDecorationLine: 'underline',
   },
-
-  details: { marginTop: 16 },
-  section: { marginTop: 18 },
-  sectionLabel: { ...type_.eyebrow, color: colors.terracotta },
-  sectionRule: { height: 1, backgroundColor: colors.hairline, marginTop: 6, marginBottom: 12 },
-  ingRow: { flexDirection: 'row', marginBottom: 8 },
-  ingDash: {
-    fontFamily: FONT.serif,
-    fontSize: 14,
-    color: colors.inkFaint,
-    width: 18,
-    paddingTop: 1,
-  },
-  ingBody: { flex: 1 },
-  ingTxt: {
-    fontFamily: FONT.sans,
-    fontSize: 15,
-    lineHeight: 22,
-    color: colors.ink,
-  },
-  ingMissingTxt: { color: colors.inkSoft },
-  ingStar: {
-    fontFamily: FONT.serifBold,
-    color: colors.terracotta,
-    fontSize: 16,
-  },
-  altTxt: {
-    fontFamily: FONT.serifItalic,
-    fontSize: 13,
-    color: colors.inkFaint,
-    marginTop: 3,
-    lineHeight: 18,
-  },
-  altStar: {
-    fontFamily: FONT.serifBold,
-    color: colors.terracotta,
-    fontStyle: 'normal',
-  },
-  metaStar: {
-    fontFamily: FONT.serifBold,
-    color: colors.terracotta,
-  },
-
-  stepRow: { flexDirection: 'row', marginBottom: 14, alignItems: 'flex-start' },
-  stepNum: {
+  saveTxt: {
     fontFamily: FONT.serifItalic,
     fontSize: 13,
     color: colors.terracotta,
-    letterSpacing: 0.6,
-    width: 32,
-    paddingTop: 2,
+    textDecorationLine: 'underline',
   },
-  stepTxt: {
-    flex: 1,
-    fontFamily: FONT.sans,
-    fontSize: 15,
-    lineHeight: 24,
-    color: colors.ink,
+  saveTxtActive: {
+    color: colors.olive,
+    textDecorationLine: 'none',
   },
 
   empty: {

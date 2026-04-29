@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { AuthRequest, authenticate } from '../middleware/auth';
 import FridgeItem from '../models/FridgeItem';
 import PantryItem from '../models/PantryItem';
+import SavedRecipe from '../models/SavedRecipe';
 import { callGroq, extractArray } from '../lib/groq';
 
 const router = Router();
@@ -150,6 +151,38 @@ RULES:
   } catch (err) {
     res.status(500).json({ error: 'Failed to get recipe suggestions. Please try again.' });
   }
+});
+
+router.get('/saved', async (req: AuthRequest, res: Response) => {
+  const items = await SavedRecipe.find({ userId: req.userId }).sort({ savedAt: -1 });
+  res.json(items);
+});
+
+router.post('/saved', async (req: AuthRequest, res: Response) => {
+  try {
+    const r = req.body as Partial<RecipeSchema>;
+    const validated = validateRecipe(r);
+    if (!validated) {
+      res.status(400).json({ error: 'Invalid recipe payload.' });
+      return;
+    }
+    const item = await SavedRecipe.create({
+      userId: req.userId,
+      title: validated.title,
+      readyInMinutes: validated.readyInMinutes,
+      summary: validated.summary,
+      ingredients: validated.ingredients,
+      steps: validated.steps,
+    });
+    res.status(201).json(item);
+  } catch (err) {
+    res.status(500).json({ error: 'Could not save the recipe.' });
+  }
+});
+
+router.delete('/saved/:id', async (req: AuthRequest, res: Response) => {
+  await SavedRecipe.findOneAndDelete({ _id: req.params.id, userId: req.userId });
+  res.status(204).send();
 });
 
 export default router;

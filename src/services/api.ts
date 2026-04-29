@@ -102,6 +102,37 @@ export async function getRecipeSuggestions() {
   return request('/api/recipes/suggestions', { method: 'POST' });
 }
 
+export interface SavedRecipeRecord {
+  _id: string;
+  title: string;
+  readyInMinutes: number;
+  summary: string;
+  ingredients: { text: string; missing: boolean; alternatives: string[] }[];
+  steps: string[];
+  savedAt: string;
+}
+
+export async function getSavedRecipes(): Promise<SavedRecipeRecord[]> {
+  return request('/api/recipes/saved');
+}
+
+export async function saveRecipe(recipe: {
+  title: string;
+  readyInMinutes: number;
+  summary: string;
+  ingredients: { text: string; missing: boolean; alternatives: string[] }[];
+  steps: string[];
+}): Promise<SavedRecipeRecord> {
+  return request('/api/recipes/saved', {
+    method: 'POST',
+    body: JSON.stringify(recipe),
+  });
+}
+
+export async function deleteSavedRecipe(id: string) {
+  return request(`/api/recipes/saved/${id}`, { method: 'DELETE' });
+}
+
 // Expiry classify + estimate
 export type ExpiryContext = 'bought' | 'made' | 'opened' | 'unrecognized';
 export type EstimateContext = Exclude<ExpiryContext, 'unrecognized'>;
