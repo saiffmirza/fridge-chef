@@ -41,10 +41,20 @@ router.get('/pantry', async (req: AuthRequest, res: Response) => {
 });
 
 router.post('/pantry', async (req: AuthRequest, res: Response) => {
-  const { name } = req.body;
+  const { name, expiresAt } = req.body;
   if (!name) { res.status(400).json({ error: 'Name is required' }); return; }
-  const item = await PantryItem.create({ userId: req.userId, name });
+  const item = await PantryItem.create({ userId: req.userId, name, expiresAt });
   res.status(201).json(item);
+});
+
+router.patch('/pantry/:id', async (req: AuthRequest, res: Response) => {
+  const item = await PantryItem.findOneAndUpdate(
+    { _id: req.params.id, userId: req.userId },
+    { $set: req.body },
+    { new: true },
+  );
+  if (!item) { res.status(404).json({ error: 'Not found' }); return; }
+  res.json(item);
 });
 
 router.delete('/pantry/:id', async (req: AuthRequest, res: Response) => {

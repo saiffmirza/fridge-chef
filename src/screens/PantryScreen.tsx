@@ -8,8 +8,14 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { addPantryItem, deletePantryItem, getPantryItems } from '../services/api';
+import {
+  addPantryItem,
+  deletePantryItem,
+  getPantryItems,
+  updatePantryItem,
+} from '../services/api';
 import BulkAddModal from '../components/BulkAddModal';
+import EditModal from '../components/EditModal';
 import PaperButton from '../components/PaperButton';
 import ScreenHeader from '../components/ScreenHeader';
 import { colors, FONT, MAX_CONTENT, type as type_, webOnly } from '../theme';
@@ -17,11 +23,26 @@ import { colors, FONT, MAX_CONTENT, type as type_, webOnly } from '../theme';
 interface PantryItemData {
   _id: string;
   name: string;
+  expiresAt?: string;
+}
+
+const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
+
+function formatBestBy(iso?: string): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  const month = MONTHS[d.getMonth()];
+  const day = d.getDate();
+  return sameYear ? `${month} ${day}` : `${month} ${d.getFullYear()}`;
 }
 
 export default function PantryScreen() {
   const [items, setItems] = useState<PantryItemData[]>([]);
   const [modalOpen, setModalOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fade = useRef(new Animated.Value(0)).current;
@@ -62,7 +83,29 @@ export default function PantryScreen() {
   const removeItem = async (id: string) => {
     await deletePantryItem(id);
     setItems((prev) => prev.filter((i) => i._id !== id));
+    if (editingId === id) setEditingId(null);
   };
+
+  const renameItem = async (id: string, newName: string) => {
+    const updated = await updatePantryItem(id, { name: newName });
+    setItems((prev) => prev.map((i) => (i._id === id ? updated : i)));
+  };
+
+  const setExpiryDate = async (id: string, date: Date) => {
+    const d = new Date(date);
+    d.setHours(0, 0, 0, 0);
+    const updated = await updatePantryItem(id, { expiresAt: d.toISOString() });
+    setItems((prev) => prev.map((i) => (i._id === id ? updated : i)));
+    setEditingId(null);
+  };
+
+  const clearExpiry = async (id: string) => {
+    const updated = await updatePantryItem(id, { expiresAt: undefined });
+    setItems((prev) => prev.map((i) => (i._id === id ? updated : i)));
+    setEditingId(null);
+  };
+
+  const editingItem = items.find((i) => i._id === editingId) ?? null;
 
   const hint =
     items.length === 0
@@ -108,11 +151,17 @@ export default function PantryScreen() {
             }
             renderItem={({ item, index }) => {
               const num = String(index + 1).padStart(2, '0');
+              const bestBy = formatBestBy(item.expiresAt);
               return (
-                <View style={s.row}>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  onPress={() => setEditingId(item._id)}
+                  style={[s.row, webOnly({ cursor: 'pointer' })]}
+                >
                   <Text style={s.num}>{num}</Text>
                   <View style={s.middle}>
                     <Text style={s.name}>{item.name}</Text>
+                    {bestBy && <Text style={s.bestBy}>best by {bestBy}</Text>}
                   </View>
                   <TouchableOpacity
                     onPress={() => removeItem(item._id)}
@@ -121,7 +170,7 @@ export default function PantryScreen() {
                   >
                     <Text style={s.removeTxt}>×</Text>
                   </TouchableOpacity>
-                </View>
+                </TouchableOpacity>
               );
             }}
           />
@@ -139,6 +188,18 @@ export default function PantryScreen() {
           }
         }}
         onConfirm={handleBulkConfirm}
+      />
+
+      <EditModal
+        visible={!!editingItem}
+        itemName={editingItem?.name ?? ''}
+        value={editingItem?.expiresAt ? new Date(editingItem.expiresAt) : undefined}
+        onRename={(newName) => editingItem && renameItem(editingItem._id, newName)}
+        onSelect={(date) => editingItem && setExpiryDate(editingItem._id, date)}
+        onClear={editingItem?.expiresAt ? () => clearExpiry(editingItem._id) : undefined}
+        onRemove={editingItem ? () => removeItem(editingItem._id) : undefined}
+        removeLabel="remove from pantry"
+        onClose={() => setEditingId(null)}
       />
     </View>
   );
@@ -175,6 +236,12 @@ const s = StyleSheet.create({
   },
   middle: { flex: 1 },
   name: { ...type_.titleItalic, color: colors.ink },
+  bestBy: {
+    fontFamily: FONT.serifItalic,
+    fontSize: 13,
+    color: colors.inkFaint,
+    marginTop: 4,
+  },
   removeBtn: {
     width: 26,
     height: 26,

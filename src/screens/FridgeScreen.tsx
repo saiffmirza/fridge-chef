@@ -16,7 +16,7 @@ import {
   updateFridgeItem,
 } from '../services/api';
 import BulkAddModal, { FridgeBulkResult } from '../components/BulkAddModal';
-import DatePickerModal from '../components/DatePickerModal';
+import EditModal from '../components/EditModal';
 import PaperButton from '../components/PaperButton';
 import ScreenHeader from '../components/ScreenHeader';
 import { colors, FONT, MAX_CONTENT, radii, type as type_, webOnly } from '../theme';
@@ -103,6 +103,15 @@ export default function FridgeScreen() {
     } finally {
       setSaving(false);
     }
+  };
+
+  const renameItem = async (id: string, newName: string) => {
+    const current = items.find((i) => i._id === id);
+    if (!current) return;
+    const { qty } = parseQuantity(current.name);
+    const merged = qty ? `${newName} (${qty})` : newName;
+    const updated = await updateFridgeItem(id, { name: merged });
+    setItems((prev) => prev.map((i) => (i._id === id ? updated : i)));
   };
 
   const setExpiryDate = async (id: string, date: Date) => {
@@ -249,10 +258,11 @@ export default function FridgeScreen() {
         onConfirm={handleBulkConfirm}
       />
 
-      <DatePickerModal
+      <EditModal
         visible={!!editingItem}
         itemName={editingItem ? parseQuantity(editingItem.name).name : ''}
         value={editingItem?.expiresAt ? new Date(editingItem.expiresAt) : undefined}
+        onRename={(newName) => editingItem && renameItem(editingItem._id, newName)}
         onSelect={(d) => editingItem && setExpiryDate(editingItem._id, d)}
         onClear={
           editingItem?.expiresAt ? () => clearExpiry(editingItem._id) : undefined

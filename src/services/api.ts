@@ -63,7 +63,7 @@ export async function addFridgeItem(name: string, expiresAt?: string) {
   });
 }
 
-export async function updateFridgeItem(id: string, updates: { expiresAt?: string }) {
+export async function updateFridgeItem(id: string, updates: { name?: string; expiresAt?: string }) {
   return request(`/api/ingredients/fridge/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(updates),
@@ -79,10 +79,17 @@ export async function getPantryItems() {
   return request('/api/ingredients/pantry');
 }
 
-export async function addPantryItem(name: string) {
+export async function addPantryItem(name: string, expiresAt?: string) {
   return request('/api/ingredients/pantry', {
     method: 'POST',
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, expiresAt }),
+  });
+}
+
+export async function updatePantryItem(id: string, updates: { name?: string; expiresAt?: string }) {
+  return request(`/api/ingredients/pantry/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(updates),
   });
 }
 
