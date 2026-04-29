@@ -184,7 +184,7 @@ export default function RecipesScreen() {
     }
   };
 
-  const showSavedLink = savedList.length >= 2;
+  const showSavedLink = savedList.length >= 1;
 
   return (
     <View style={s.root}>
