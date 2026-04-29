@@ -13,13 +13,19 @@ import ScreenHeader from '../components/ScreenHeader';
 import PaperButton from '../components/PaperButton';
 import { colors, FONT, MAX_CONTENT, type as type_, webOnly } from '../theme';
 
+interface Ingredient {
+  text: string;
+  missing: boolean;
+  alternatives: string[];
+}
+
 interface Recipe {
   title: string;
   readyInMinutes: number;
   summary: string;
-  ingredients: string[];
-  instructions: string;
-  missingIngredients: string[];
+  ingredients: Ingredient[];
+  steps: string[];
+  missingCount: number;
 }
 
 export default function RecipesScreen() {
@@ -103,7 +109,7 @@ export default function RecipesScreen() {
         renderItem={({ item, index }) => {
           const isOpen = expanded === index;
           const num = String(index + 1).padStart(2, '0');
-          const missing = item.missingIngredients ?? [];
+          const missingCount = item.missingCount ?? item.ingredients.filter((i) => i.missing).length;
           return (
             <Animated.View style={{ opacity: fade }}>
               <TouchableOpacity
@@ -117,11 +123,11 @@ export default function RecipesScreen() {
                     <Text style={s.metaTxt}>
                       {item.readyInMinutes != null ? `${item.readyInMinutes} min` : ''}
                     </Text>
-                    {missing.length > 0 && (
+                    {missingCount > 0 && (
                       <>
                         <Text style={s.metaSep}> · </Text>
                         <Text style={[s.metaTxt, { color: colors.warning }]}>
-                          {missing.length} missing
+                          {missingCount} recommended
                         </Text>
                       </>
                     )}
@@ -142,28 +148,43 @@ export default function RecipesScreen() {
                       <View style={s.section}>
                         <Text style={s.sectionLabel}>ingredients</Text>
                         <View style={s.sectionRule} />
-                        {item.ingredients.map((ing, i) => {
-                          const isMissing = missing.includes(ing);
-                          return (
-                            <View key={i} style={s.ingRow}>
-                              <Text style={s.ingDash}>·</Text>
-                              <Text style={[s.ingTxt, isMissing && s.ingMissing]}>
-                                {ing}
-                                {isMissing ? <Text style={s.missingTag}>  · need</Text> : null}
-                              </Text>
+                        {item.ingredients.map((ing, i) => (
+                          <View key={i} style={s.ingRow}>
+                            <Text style={s.ingDash}>·</Text>
+                            <View style={s.ingBody}>
+                              <View style={s.ingMain}>
+                                <Text style={[s.ingTxt, ing.missing && s.ingMissingTxt]}>
+                                  {ing.text}
+                                </Text>
+                                {ing.missing && (
+                                  <View style={s.recBadge}>
+                                    <Text style={s.recBadgeTxt}>recommended</Text>
+                                  </View>
+                                )}
+                              </View>
+                              {ing.missing && ing.alternatives.length > 0 && (
+                                <Text style={s.altTxt}>
+                                  or {ing.alternatives.join(', ')}
+                                </Text>
+                              )}
                             </View>
-                          );
-                        })}
+                          </View>
+                        ))}
                       </View>
                     )}
 
-                    {item.instructions ? (
+                    {item.steps?.length > 0 && (
                       <View style={s.section}>
                         <Text style={s.sectionLabel}>method</Text>
                         <View style={s.sectionRule} />
-                        <Text style={s.instructions}>{item.instructions}</Text>
+                        {item.steps.map((step, i) => (
+                          <View key={i} style={s.stepRow}>
+                            <Text style={s.stepNum}>{String(i + 1).padStart(2, '0')}</Text>
+                            <Text style={s.stepTxt}>{step}</Text>
+                          </View>
+                        ))}
                       </View>
-                    ) : null}
+                    )}
                   </View>
                 )}
               </TouchableOpacity>
@@ -245,27 +266,56 @@ const s = StyleSheet.create({
   section: { marginTop: 18 },
   sectionLabel: { ...type_.eyebrow, color: colors.terracotta },
   sectionRule: { height: 1, backgroundColor: colors.hairline, marginTop: 6, marginBottom: 12 },
-  ingRow: { flexDirection: 'row', marginBottom: 6 },
+  ingRow: { flexDirection: 'row', marginBottom: 8 },
   ingDash: {
     fontFamily: FONT.serif,
     fontSize: 14,
     color: colors.inkFaint,
     width: 18,
+    paddingTop: 1,
   },
+  ingBody: { flex: 1 },
+  ingMain: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
   ingTxt: {
-    flex: 1,
     fontFamily: FONT.sans,
     fontSize: 15,
     lineHeight: 22,
     color: colors.ink,
+    flexShrink: 1,
   },
-  ingMissing: { color: colors.inkSoft },
-  missingTag: {
+  ingMissingTxt: { color: colors.inkSoft },
+  recBadge: {
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    backgroundColor: colors.butterTint,
+    borderRadius: 4,
+  },
+  recBadgeTxt: {
+    fontFamily: FONT.sansSemi,
+    fontSize: 10,
+    letterSpacing: 1.2,
+    color: '#7A5A1A',
+    textTransform: 'uppercase',
+  },
+  altTxt: {
     fontFamily: FONT.serifItalic,
-    color: colors.warning,
-    fontSize: 12,
+    fontSize: 13,
+    color: colors.inkFaint,
+    marginTop: 3,
+    lineHeight: 18,
   },
-  instructions: {
+
+  stepRow: { flexDirection: 'row', marginBottom: 14, alignItems: 'flex-start' },
+  stepNum: {
+    fontFamily: FONT.serifItalic,
+    fontSize: 13,
+    color: colors.terracotta,
+    letterSpacing: 0.6,
+    width: 32,
+    paddingTop: 2,
+  },
+  stepTxt: {
+    flex: 1,
     fontFamily: FONT.sans,
     fontSize: 15,
     lineHeight: 24,
