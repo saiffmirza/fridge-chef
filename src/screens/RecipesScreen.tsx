@@ -211,15 +211,15 @@ export default function RecipesScreen() {
           {showSavedLink && (
             <TouchableOpacity
               onPress={() => setSavedModalOpen(true)}
+              hitSlop={8}
               activeOpacity={0.7}
               style={[s.savedCta, webOnly({ cursor: 'pointer' })]}
             >
-              <Text style={s.savedCtaEyebrow}>The Collection</Text>
-              <View style={s.savedCtaRow}>
-                <Text style={s.savedCtaLabel}>your saved recipes</Text>
-                <Text style={s.savedCtaCount}>{savedList.length}</Text>
-                <Text style={s.savedCtaArrow}>→</Text>
-              </View>
+              <Text style={s.savedCtaTxt}>
+                saved recipes{' '}
+                <Text style={s.savedCtaCount}>({savedList.length})</Text>
+                {'  →'}
+              </Text>
             </TouchableOpacity>
           )}
         </View>
@@ -336,39 +336,18 @@ const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper, alignItems: 'center' },
   frame: { flex: 1, width: '100%', maxWidth: MAX_CONTENT },
   savedCta: {
-    marginTop: 16,
-    paddingTop: 14,
-    paddingBottom: 4,
-    borderTopWidth: 1,
-    borderTopColor: colors.hairline,
+    marginTop: 14,
+    alignItems: 'center',
   },
-  savedCtaEyebrow: {
-    ...type_.eyebrow,
+  savedCtaTxt: {
+    fontFamily: FONT.serifItalic,
+    fontSize: 16,
     color: colors.terracotta,
-    marginBottom: 6,
-  },
-  savedCtaRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-  },
-  savedCtaLabel: {
-    fontFamily: FONT.serifBoldItalic,
-    fontSize: 22,
-    lineHeight: 28,
-    letterSpacing: -0.3,
-    color: colors.ink,
-    flex: 1,
+    textDecorationLine: 'underline',
   },
   savedCtaCount: {
-    fontFamily: FONT.serifItalic,
-    fontSize: 18,
     color: colors.olive,
-    marginRight: 10,
-  },
-  savedCtaArrow: {
-    fontFamily: FONT.serif,
-    fontSize: 22,
-    color: colors.terracotta,
+    textDecorationLine: 'none',
   },
   actionRow: {
     paddingHorizontal: 28,
