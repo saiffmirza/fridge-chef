@@ -198,19 +198,6 @@ export default function RecipesScreen() {
               ? 'tap any recipe to read the full method.'
               : 'a few recipes from what you have on hand. press below.'
           }
-          rightAction={
-            showSavedLink ? (
-              <TouchableOpacity
-                onPress={() => setSavedModalOpen(true)}
-                hitSlop={10}
-                style={webOnly({ cursor: 'pointer' })}
-              >
-                <Text style={s.savedLinkTxt}>
-                  saved <Text style={s.savedCount}>({savedList.length})</Text> →
-                </Text>
-              </TouchableOpacity>
-            ) : null
-          }
         />
 
         <View style={s.actionRow}>
@@ -221,6 +208,20 @@ export default function RecipesScreen() {
             loading={loading}
             full
           />
+          {showSavedLink && (
+            <TouchableOpacity
+              onPress={() => setSavedModalOpen(true)}
+              activeOpacity={0.7}
+              style={[s.savedCta, webOnly({ cursor: 'pointer' })]}
+            >
+              <Text style={s.savedCtaEyebrow}>The Collection</Text>
+              <View style={s.savedCtaRow}>
+                <Text style={s.savedCtaLabel}>your saved recipes</Text>
+                <Text style={s.savedCtaCount}>{savedList.length}</Text>
+                <Text style={s.savedCtaArrow}>→</Text>
+              </View>
+            </TouchableOpacity>
+          )}
         </View>
 
         {error && (
@@ -334,13 +335,41 @@ export default function RecipesScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper, alignItems: 'center' },
   frame: { flex: 1, width: '100%', maxWidth: MAX_CONTENT },
-  savedLinkTxt: {
-    fontFamily: FONT.serifItalic,
-    fontSize: 14,
-    color: colors.terracotta,
-    textDecorationLine: 'underline',
+  savedCta: {
+    marginTop: 16,
+    paddingTop: 14,
+    paddingBottom: 4,
+    borderTopWidth: 1,
+    borderTopColor: colors.hairline,
   },
-  savedCount: { color: colors.inkSoft, textDecorationLine: 'none' },
+  savedCtaEyebrow: {
+    ...type_.eyebrow,
+    color: colors.terracotta,
+    marginBottom: 6,
+  },
+  savedCtaRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+  },
+  savedCtaLabel: {
+    fontFamily: FONT.serifBoldItalic,
+    fontSize: 22,
+    lineHeight: 28,
+    letterSpacing: -0.3,
+    color: colors.ink,
+    flex: 1,
+  },
+  savedCtaCount: {
+    fontFamily: FONT.serifItalic,
+    fontSize: 18,
+    color: colors.olive,
+    marginRight: 10,
+  },
+  savedCtaArrow: {
+    fontFamily: FONT.serif,
+    fontSize: 22,
+    color: colors.terracotta,
+  },
   actionRow: {
     paddingHorizontal: 28,
     paddingTop: 4,
