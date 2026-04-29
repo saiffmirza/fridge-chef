@@ -127,7 +127,8 @@ export default function RecipesScreen() {
                       <>
                         <Text style={s.metaSep}> · </Text>
                         <Text style={[s.metaTxt, { color: colors.warning }]}>
-                          {missingCount} recommended
+                          +{missingCount}
+                          <Text style={s.metaStar}>*</Text>
                         </Text>
                       </>
                     )}
@@ -152,19 +153,13 @@ export default function RecipesScreen() {
                           <View key={i} style={s.ingRow}>
                             <Text style={s.ingDash}>·</Text>
                             <View style={s.ingBody}>
-                              <View style={s.ingMain}>
-                                <Text style={[s.ingTxt, ing.missing && s.ingMissingTxt]}>
-                                  {ing.text}
-                                </Text>
-                                {ing.missing && (
-                                  <View style={s.recBadge}>
-                                    <Text style={s.recBadgeTxt}>recommended</Text>
-                                  </View>
-                                )}
-                              </View>
+                              <Text style={[s.ingTxt, ing.missing && s.ingMissingTxt]}>
+                                {ing.text}
+                                {ing.missing && <Text style={s.ingStar}>*</Text>}
+                              </Text>
                               {ing.missing && ing.alternatives.length > 0 && (
                                 <Text style={s.altTxt}>
-                                  or {ing.alternatives.join(', ')}
+                                  <Text style={s.altStar}>*</Text>or {ing.alternatives.join(', ')}
                                 </Text>
                               )}
                             </View>
@@ -275,27 +270,17 @@ const s = StyleSheet.create({
     paddingTop: 1,
   },
   ingBody: { flex: 1 },
-  ingMain: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
   ingTxt: {
     fontFamily: FONT.sans,
     fontSize: 15,
     lineHeight: 22,
     color: colors.ink,
-    flexShrink: 1,
   },
   ingMissingTxt: { color: colors.inkSoft },
-  recBadge: {
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    backgroundColor: colors.butterTint,
-    borderRadius: 4,
-  },
-  recBadgeTxt: {
-    fontFamily: FONT.sansSemi,
-    fontSize: 10,
-    letterSpacing: 1.2,
-    color: '#7A5A1A',
-    textTransform: 'uppercase',
+  ingStar: {
+    fontFamily: FONT.serifBold,
+    color: colors.terracotta,
+    fontSize: 16,
   },
   altTxt: {
     fontFamily: FONT.serifItalic,
@@ -303,6 +288,15 @@ const s = StyleSheet.create({
     color: colors.inkFaint,
     marginTop: 3,
     lineHeight: 18,
+  },
+  altStar: {
+    fontFamily: FONT.serifBold,
+    color: colors.terracotta,
+    fontStyle: 'normal',
+  },
+  metaStar: {
+    fontFamily: FONT.serifBold,
+    color: colors.terracotta,
   },
 
   stepRow: { flexDirection: 'row', marginBottom: 14, alignItems: 'flex-start' },
