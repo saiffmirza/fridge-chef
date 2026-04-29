@@ -198,21 +198,20 @@ export default function RecipesScreen() {
               ? 'tap any recipe to read the full method.'
               : 'a few recipes from what you have on hand. press below.'
           }
+          rightAction={
+            showSavedLink ? (
+              <TouchableOpacity
+                onPress={() => setSavedModalOpen(true)}
+                hitSlop={10}
+                style={webOnly({ cursor: 'pointer' })}
+              >
+                <Text style={s.savedLinkTxt}>
+                  saved <Text style={s.savedCount}>({savedList.length})</Text> →
+                </Text>
+              </TouchableOpacity>
+            ) : null
+          }
         />
-
-        {showSavedLink && (
-          <View style={s.savedRow}>
-            <TouchableOpacity
-              onPress={() => setSavedModalOpen(true)}
-              hitSlop={10}
-              style={[s.savedLink, webOnly({ cursor: 'pointer' })]}
-            >
-              <Text style={s.savedLinkTxt}>
-                saved <Text style={s.savedCount}>({savedList.length})</Text> →
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
 
         <View style={s.actionRow}>
           <PaperButton
@@ -335,13 +334,6 @@ export default function RecipesScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper, alignItems: 'center' },
   frame: { flex: 1, width: '100%', maxWidth: MAX_CONTENT },
-  savedRow: {
-    paddingHorizontal: 28,
-    paddingTop: 0,
-    paddingBottom: 8,
-    alignItems: 'flex-end',
-  },
-  savedLink: {},
   savedLinkTxt: {
     fontFamily: FONT.serifItalic,
     fontSize: 14,
