@@ -211,13 +211,12 @@ export default function RecipesScreen() {
           {showSavedLink && (
             <TouchableOpacity
               onPress={() => setSavedModalOpen(true)}
-              hitSlop={8}
-              activeOpacity={0.7}
-              style={[s.savedCta, webOnly({ cursor: 'pointer' })]}
+              activeOpacity={0.85}
+              style={[s.savedBtn, webOnly({ cursor: 'pointer' })]}
             >
-              <Text style={s.savedCtaTxt}>
+              <Text style={s.savedBtnTxt}>
                 saved recipes{' '}
-                <Text style={s.savedCtaCount}>({savedList.length})</Text>
+                <Text style={s.savedBtnCount}>({savedList.length})</Text>
                 {'  →'}
               </Text>
             </TouchableOpacity>
@@ -335,19 +334,26 @@ export default function RecipesScreen() {
 const s = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.paper, alignItems: 'center' },
   frame: { flex: 1, width: '100%', maxWidth: MAX_CONTENT },
-  savedCta: {
-    marginTop: 14,
+  savedBtn: {
+    marginTop: 10,
+    paddingVertical: 14,
+    paddingHorizontal: 22,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.terracotta,
+    backgroundColor: 'transparent',
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  savedCtaTxt: {
-    fontFamily: FONT.serifItalic,
-    fontSize: 16,
+  savedBtnTxt: {
+    fontFamily: FONT.sansSemi,
+    fontSize: 15,
+    letterSpacing: 0.2,
     color: colors.terracotta,
-    textDecorationLine: 'underline',
   },
-  savedCtaCount: {
-    color: colors.olive,
-    textDecorationLine: 'none',
+  savedBtnCount: {
+    fontFamily: FONT.serifItalic,
+    color: colors.terracottaDeep,
   },
   actionRow: {
     paddingHorizontal: 28,
